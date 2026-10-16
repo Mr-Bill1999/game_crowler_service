@@ -19,3 +19,6 @@ research/catalog_watch/
 stand/tapes/
 stand/seed/
 backend/tapes/
+# server secrets and dumps never go to git
+deploy/.env
+deploy/backups/

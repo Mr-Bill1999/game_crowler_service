@@ -1,0 +1,63 @@
+# Production on one VPS. Only nginx (web) is reachable from outside; Postgres, Redis and the API stay on the
+# Compose network: the API trusts X-Real-IP for its per-address limits, so it must never be exposed directly.
+# Secrets come from deploy/.env on the server (never in git): POSTGRES_PASSWORD and the GA_* keys.
+name: gameanalytics
+
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "10m", max-file: "5"}
+
+x-backend: &backend
+  build: ../backend
+  restart: unless-stopped
+  logging: *logging
+  env_file: .env
+  environment: &backend-env
+    GA_DATABASE_URL: postgresql+asyncpg://ga:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}@postgres:5432/gameanalytics
+    GA_REDIS_URL: redis://redis:6379/0
+  depends_on:
+    postgres: {condition: service_healthy}
+    redis: {condition: service_started}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      POSTGRES_USER: ga
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+      POSTGRES_DB: gameanalytics
+    volumes: [pgdata:/var/lib/postgresql/data, ./backups:/backups]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ga -d gameanalytics"]
+      interval: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    logging: *logging
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redisdata:/data]
+
+  api:
+    <<: *backend
+    environment:
+      <<: *backend-env
+      WEB_CONCURRENCY: ${GA_API_WORKERS:-2}
+
+  worker:
+    <<: *backend
+    command: ["arq", "app.pipeline.tasks.WorkerSettings"]
+
+  web:
+    build: ../frontend
+    restart: unless-stopped
+    logging: *logging
+    ports: ["80:80"]
+    depends_on: [api]
+
+volumes:
+  pgdata:
+  redisdata:
