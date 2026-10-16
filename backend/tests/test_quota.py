@@ -29,3 +29,27 @@ def test_quota_day_is_pacific():
     start, nxt = quota_day(datetime(2026, 10, 16, 6, 30, tzinfo=UTC), "America/Los_Angeles")
     assert start.astimezone(UTC) == datetime(2026, 10, 15, 7, 0, tzinfo=UTC)
     assert nxt.astimezone(UTC) == datetime(2026, 10, 16, 7, 0, tzinfo=UTC)
+
+
+def test_per_address_cap():
+    assert "сети" in refusal(S, used=3, user_used=0, service_tokens=0, deep_tokens=0, ip_used=3)
+
+
+def test_quota_day_on_the_autumn_clock_change():
+    # 1 Nov 2026, 02:00 PDT → 01:00 PST: that quota day lasts 25 hours, and the next one starts at 08:00 UTC
+    start, nxt = quota_day(datetime(2026, 11, 1, 12, 0, tzinfo=UTC), "America/Los_Angeles")
+    assert start.astimezone(UTC) == datetime(2026, 11, 1, 7, 0, tzinfo=UTC)
+    assert nxt.astimezone(UTC) == datetime(2026, 11, 2, 8, 0, tzinfo=UTC)
+    assert (nxt - start).total_seconds() == 25 * 3600
+
+
+def test_quota_day_in_the_repeated_hour():
+    # 01:30 happens twice that night; both belong to 1 November
+    first = datetime(2026, 11, 1, 8, 30, tzinfo=UTC)   # 01:30 PDT
+    second = datetime(2026, 11, 1, 9, 30, tzinfo=UTC)  # 01:30 PST
+    assert quota_day(first, "America/Los_Angeles") == quota_day(second, "America/Los_Angeles")
+
+
+def test_quota_day_on_the_spring_clock_change():
+    start, nxt = quota_day(datetime(2027, 3, 14, 12, 0, tzinfo=UTC), "America/Los_Angeles")
+    assert (nxt - start).total_seconds() == 23 * 3600

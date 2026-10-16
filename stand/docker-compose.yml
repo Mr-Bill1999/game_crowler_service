@@ -6,13 +6,14 @@ name: ga-stand
 x-backend: &backend
   build: ../backend
   env_file: ../backend/.env  # API keys; everything below overrides it
-  environment:
+  environment: &backend-env
     GA_DATABASE_URL: postgresql+asyncpg://ga:ga@postgres:5432/gameanalytics
     GA_REDIS_URL: redis://redis:6379/0
     GA_TAPE_MODE: ${GA_TAPE_MODE:-replay}
     GA_TAPE_DIR: /tapes
     GA_FROZEN_NOW: ${GA_FROZEN_NOW:-}
     GA_CRON_ENABLED: "false"
+    GA_FAULTS: ${GA_FAULTS:-}
   volumes: ["./tapes:/tapes"]
   depends_on:
     postgres: {condition: service_healthy}
@@ -20,6 +21,7 @@ x-backend: &backend
 
 services:
   postgres:
+    restart: unless-stopped
     image: pgvector/pgvector:pg16
     environment: {POSTGRES_USER: ga, POSTGRES_PASSWORD: ga, POSTGRES_DB: gameanalytics}
     ports: ["5433:5432"]
@@ -30,18 +32,25 @@ services:
       retries: 20
 
   redis:
+    restart: unless-stopped
     image: redis:7-alpine
     ports: ["6380:6379"]
 
   api:
+    restart: unless-stopped
     <<: *backend
     ports: ["8001:8000"]
+    environment:
+      <<: *backend-env
+      WEB_CONCURRENCY: ${GA_API_WORKERS:-2}  # uvicorn processes; one tops out near 350 req/s (stand/load.py)
 
   worker:
+    restart: unless-stopped
     <<: *backend
     command: ["arq", "app.pipeline.tasks.WorkerSettings"]
 
   web:
+    restart: unless-stopped
     build: ../frontend
     ports: ["8081:80"]
     depends_on: [api]

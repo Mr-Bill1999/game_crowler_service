@@ -11,7 +11,7 @@ from google import genai
 from google.genai import errors, types
 
 from app.ai.base import LLMResult
-from app.core import tape
+from app.core import faults, tape
 
 # USD per 1M tokens: standard input, standard output, batch input, batch output.
 # ai.google.dev/gemini-api/docs/pricing on 15.10.2026. Output includes thinking tokens.
@@ -27,6 +27,7 @@ PRICES: dict[str, tuple[float, float, float, float]] = {
     "gemini-4-argon": (2.00, 10.00, 1.00, 5.00),  # doubles on 01.12.2026
 }
 RETRYABLE = {429, 500, 503, 504}
+MAX_WAIT_S = 180  # longer retryDelay means a daily limit: fail now, the next cycle tries again
 # Gemini's response_json_schema rejects some JSON Schema keywords; ours only need the basics.
 _UNSUPPORTED = {"additionalProperties"}
 
@@ -93,16 +94,27 @@ class GeminiProvider:
                    "max_output_tokens": max_output_tokens, "media_resolution": media_resolution,
                    "prompt": prompt if isinstance(prompt, str)
                    else [p.model_dump(mode="json", exclude_none=True) for p in prompt]}
-        return await tape.call(
-            "gemini", request,
-            lambda: self._generate_json_live(system=system, prompt=prompt, schema=schema, model=model,
-                                             thinking_level=thinking_level, max_output_tokens=max_output_tokens,
-                                             media_resolution=media_resolution),
-            encode=asdict, decode=lambda d: LLMResult(**d), summary=f"{model} {system[:60]}")
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                if kind := faults.pick("gemini"):
+                    raise faults.gemini_failure(kind)
+                return await tape.call(
+                    "gemini", request,
+                    lambda: self._generate_once(system=system, prompt=prompt, schema=schema, model=model,
+                                                thinking_level=thinking_level, max_output_tokens=max_output_tokens,
+                                                media_resolution=media_resolution),
+                    encode=asdict, decode=lambda d: LLMResult(**d), summary=f"{model} {system[:60]}")
+            except errors.APIError as e:
+                delay = retry_delay(e, attempt)
+                # a daily limit answers "retry in hours": waiting it out would hold a worker slot until tomorrow
+                if e.code not in RETRYABLE or attempt == self.max_attempts or delay > MAX_WAIT_S:
+                    raise
+                await asyncio.sleep(delay)
+        raise RuntimeError("unreachable")
 
-    async def _generate_json_live(self, *, system: str, prompt: str | list[types.Part], schema: dict, model: str,
-                                  thinking_level: str | None, max_output_tokens: int,
-                                  media_resolution: str | None) -> LLMResult:
+    async def _generate_once(self, *, system: str, prompt: str | list[types.Part], schema: dict, model: str,
+                             thinking_level: str | None, max_output_tokens: int,
+                             media_resolution: str | None) -> LLMResult:
         if isinstance(prompt, list):
             prompt = types.Content(role="user", parts=prompt)
         config = types.GenerateContentConfig(
@@ -114,17 +126,9 @@ class GeminiProvider:
             thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel[thinking_level.upper()])
             if thinking_level else None,
         )
-        for attempt in range(1, self.max_attempts + 1):
-            t0 = time.perf_counter()
-            try:
-                r = await self._call(model, prompt, config)
-                break
-            except errors.APIError as e:
-                if e.code not in RETRYABLE or attempt == self.max_attempts:
-                    raise
-                await asyncio.sleep(retry_delay(e, attempt))
+        t0 = time.perf_counter()
+        r = await self._call(model, prompt, config)
         latency = time.perf_counter() - t0
-
         if not r.text:
             reason = r.candidates[0].finish_reason if r.candidates else "no candidates"
             raise ValueError(f"{model}: empty response ({reason})")
@@ -139,20 +143,22 @@ class GeminiProvider:
     async def embed(self, texts: list[str], *, model: str, dim: int) -> list[list[float]]:
         """One vector per text. Each text is its own Content: gemini-embedding-2 merges a plain list of strings into
         a single vector. Per-minute 429s are waited out; a daily one (retry in hours) is raised to the caller."""
-        return await tape.call("gemini-embed", {"model": model, "dim": dim, "texts": texts},
-                               lambda: self._embed_live(texts, model=model, dim=dim), summary=f"{model} x{len(texts)}")
-
-    async def _embed_live(self, texts: list[str], *, model: str, dim: int) -> list[list[float]]:
         contents = [types.Content(parts=[types.Part(text=t)]) for t in texts]
         config = types.EmbedContentConfig(task_type="SEMANTIC_SIMILARITY", output_dimensionality=dim)
+
+        async def once() -> list[list[float]]:
+            r = await self.client.aio.models.embed_content(model=model, contents=contents, config=config)
+            return [e.values for e in r.embeddings]
+
         for attempt in range(1, self.max_attempts + 1):
             try:
-                r = await self.client.aio.models.embed_content(model=model, contents=contents, config=config)
-                return [e.values for e in r.embeddings]
+                if kind := faults.pick("gemini-embed"):
+                    raise faults.gemini_failure(kind)
+                return await tape.call("gemini-embed", {"model": model, "dim": dim, "texts": texts}, once,
+                                       summary=f"{model} x{len(texts)}")
             except errors.APIError as e:
                 delay = retry_delay(e, attempt)
-                if e.code not in RETRYABLE or attempt == self.max_attempts or delay > 180:
+                if e.code not in RETRYABLE or attempt == self.max_attempts or delay > MAX_WAIT_S:
                     raise
                 await asyncio.sleep(delay)
         raise RuntimeError("unreachable")
-

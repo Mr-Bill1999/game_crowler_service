@@ -3,7 +3,8 @@
 import asyncio
 import logging
 from collections import Counter
-from datetime import UTC, datetime
+from contextvars import ContextVar
+from datetime import UTC, datetime, timedelta
 
 from arq import cron
 from arq.connections import RedisSettings
@@ -32,6 +33,7 @@ from app.sources.youtube import YouTube, YouTubeError, pick_clips, pick_video
 
 log = logging.getLogger(__name__)
 RUN_TIMEOUT = 55 * 60
+ctx_owner: ContextVar[str] = ContextVar("run_owner", default="worker")
 INGEST_CONCURRENCY = 4  # games in flight; HTTP pacing is the rate limiter's job
 
 
@@ -43,6 +45,17 @@ async def startup(ctx: dict) -> None:
     bus = EventBus(redis, s.events_stream, s.events_maxlen)
     client = MCClient(s, bus)
     ctx.update(deps=Deps(s, Metacritic(client, s), bus, SessionLocal), _client=client, _bus_redis=redis)
+    if not ctx.get("cli"):  # the worker starting: none of its runs can still be in progress
+        async with SessionLocal() as session:
+            if lost := await close_lost_runs(session, datetime.now(UTC), worker_restarted=True):
+                await bus.emit("run.interrupted", "error", count=lost, reason="worker restarted")
+        # arq marks a running job "in progress" until its timeout (55 min for a cycle); a killed worker leaves the
+        # marks behind and the jobs wait out that hour. One worker runs this queue, so before it takes any job,
+        # every mark belongs to a dead process: drop them and the jobs run again now (they are idempotent).
+        stale = [k async for k in ctx["redis"].scan_iter(match="arq:in-progress:*")]
+        if stale:
+            await ctx["redis"].delete(*stale)
+            await bus.emit("worker.recovered", "retry", jobs=len(stale))
     if s.llm_provider == "gemini" and s.gemini_api_key:
         ctx["llm"] = GeminiProvider(s.gemini_api_key, s.llm_model, rpm=s.llm_rpm, concurrency=s.llm_concurrency)
     await bus.emit("worker.start", rps=s.rate_limit_rps, concurrency=s.max_concurrency,
@@ -54,11 +67,26 @@ async def shutdown(ctx: dict) -> None:
     await ctx["_bus_redis"].aclose()
 
 
+async def close_lost_runs(session, now: datetime, *, worker_restarted: bool = False) -> int:
+    """Runs a killed process left "running". Past the job timeout none can still be alive; and when the worker
+    itself starts, none of its own can be (one worker runs the cycles). Runs started by hand from the CLI next to a
+    busy worker are only closed by the timeout."""
+    lost = PipelineRun.started_at < now - timedelta(seconds=RUN_TIMEOUT + 300)
+    if worker_restarted:
+        lost = lost | (PipelineRun.owner == "worker")
+    r = await session.execute(update(PipelineRun).where(PipelineRun.status == "running", lost)
+                              .values(status="interrupted", finished_at=now))
+    await session.commit()
+    return r.rowcount
+
+
 async def _start_run(d: Deps, kind: str) -> str:
     run_id = f"{kind}-{datetime.now(UTC):%m%d-%H%M%S}"
     current_run_id.set(run_id)
     async with d.sessions() as session:
-        session.add(PipelineRun(id=run_id, kind=kind, stats={}))
+        if lost := await close_lost_runs(session, datetime.now(UTC)):
+            await d.bus.emit("run.interrupted", "error", count=lost)
+        session.add(PipelineRun(id=run_id, kind=kind, stats={}, owner=ctx_owner.get()))
         await session.commit()
     await d.bus.emit("run.start", kind=kind)
     return run_id
@@ -69,7 +97,7 @@ async def _finish_run(d: Deps, run_id: str, status: str, stats: dict) -> None:
         await session.execute(update(PipelineRun).where(PipelineRun.id == run_id)
                               .values(status=status, finished_at=datetime.now(UTC), stats=stats))
         await session.commit()
-    await d.bus.emit("run.done", status="ok" if status == "done" else "error", **stats)
+    await d.bus.emit("run.done", status={"done": "ok", "partial": "retry"}.get(status, "error"), result=status, **stats)
 
 
 async def _ingest_many(ctx: dict, items: list[tuple[str, str | None]]) -> dict:
@@ -105,6 +133,10 @@ async def _ingest_many(ctx: dict, items: list[tuple[str, str | None]]) -> dict:
     }
 
 
+def _reason(e: Exception) -> str:
+    return f"{type(e).__name__}: {e}"[:300]
+
+
 async def _run(ctx: dict, kind: str, work) -> dict:
     d: Deps = ctx["deps"]
     run_id = await _start_run(d, kind)
@@ -113,7 +145,7 @@ async def _run(ctx: dict, kind: str, work) -> dict:
     except Exception as e:
         await _finish_run(d, run_id, "error", {"error": f"{type(e).__name__}: {e}"[:300]})
         raise
-    await _finish_run(d, run_id, "done", stats)
+    await _finish_run(d, run_id, "partial" if stats.get("failed") else "done", stats)
     await ctx["redis"].enqueue_job("update_facets", _job_id="facets")  # new games need essences and neighbours
     return stats
 
@@ -134,16 +166,30 @@ async def run_hourly(ctx: dict) -> dict:
 
     async def work(d: Deps) -> dict:
         now = clock.now()
-        top = await d.mc.new_releases_top()
+        failed: dict[str, str] = {}
+        # Each stage stands on its own: a failing top-20 request must not cost the catalog and the refreshes.
+        top = []
+        try:
+            top = await d.mc.new_releases_top()
+        except Exception as e:  # noqa: BLE001
+            failed["top"] = _reason(e)
+            await d.bus.emit("top.recorded", "error", error=failed["top"])
         top_stats = await _ingest_many(ctx, [(i.slug, "new_releases") for i in top])
-        async with d.sessions() as session:
-            change = await record_top(session, top, now)
-        await d.bus.emit("top.recorded", size=change["size"], stored=change["stored"],
-                         entered=change["entered"] or None, left=change["left"] or None)
+        change = {"entered": [], "left": []}
+        if top:  # an empty answer would clear yesterday's top: keep it until Metacritic answers again
+            async with d.sessions() as session:
+                change = await record_top(session, top, now)
+            await d.bus.emit("top.recorded", size=change["size"], stored=change["stored"],
+                             entered=change["entered"] or None, left=change["left"] or None)
 
         top_slugs = {i.slug for i in top}
+        found: dict = {}
+        try:
+            async with d.sessions() as session:
+                found = await discover_hourly(d.mc, session, d.settings, d.bus, now.date())
+        except Exception as e:  # noqa: BLE001
+            failed["discovery"] = _reason(e)
         async with d.sessions() as session:
-            found = await discover_hourly(d.mc, session, d.settings, d.bus, now.date())
             due = list((await session.execute(
                 select(Game.slug).where(Game.next_refresh_at <= now, Game.archived_at.is_(None))
                 .order_by(Game.next_refresh_at).limit(2000))).scalars())
@@ -152,10 +198,13 @@ async def run_hourly(ctx: dict) -> dict:
         refresh = [(slug, None) for slug in due if slug not in fresh]
         await d.bus.emit("refresh.due", count=len(refresh))
         stats = await _ingest_many(ctx, new + refresh)
-        return {"top": {"games": top_stats["games"], "new_games": top_stats["new_games"],
-                        "entered": len(change["entered"]), "left": len(change["left"])},
-                "discovered": {src: len(v) for src, v in found.items()}, "refreshed": len(refresh), **stats,
-                "to_analyze": stats["to_analyze"] + top_stats["to_analyze"]}
+        out = {"top": {"games": top_stats["games"], "new_games": top_stats["new_games"],
+                       "entered": len(change["entered"]), "left": len(change["left"])},
+               "discovered": {src: len(v) for src, v in found.items()}, "refreshed": len(refresh), **stats,
+               "to_analyze": stats["to_analyze"] + top_stats["to_analyze"]}
+        if failed:
+            out["failed"] = failed
+        return out
 
     return await _run(ctx, "hourly", work)
 
@@ -308,7 +357,8 @@ async def deep_analyze(ctx: dict, deep_id: int) -> None:
                            fps=s.deep_fps)
     except Exception as e:
         log.exception("deep analyze failed: %s", game.slug)
-        await finish("error", f"{type(e).__name__}: {e}"[:300], **video_fields)
+        # a call that failed is not billed: the user keeps the slot and can try again
+        await finish("failed", f"{type(e).__name__}: {e}"[:300], **video_fields)
         return
     facts = {**r.data, "facts": absolute_facts(r.data, video, clips),
              "video": {"id": video.id, "url": video.url, "title": video.title, "channel": video.channel,

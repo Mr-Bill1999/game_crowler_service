@@ -39,3 +39,16 @@ stand/stand.sh down      # stop; `down -v` also drops the stand's database volum
 
 A new snapshot changes the frozen clock, so old tapes stop matching: re-record after `seed`.
 `stand/seed/` and `stand/tapes/` hold Metacritic data and model output and stay out of git.
+
+## Breaking it on purpose
+
+```bash
+stand/stand.sh faults "metacritic:http503:0.3; gemini:daily"   # see backend/app/core/faults.py
+stand/stand.sh faults off
+python3 stand/chaos.py           # every scenario: reset, break, run a cycle, check; exit 1 on a failed check
+python3 stand/chaos.py --list
+backend/.venv/bin/python stand/load.py --users 50 --seconds 30 --sse 30
+GA_TEST_DATABASE_URL=postgresql+asyncpg://ga:ga@localhost:5433/ga_test backend/.venv/bin/python -m pytest backend/tests/integration
+```
+
+Findings of phase 1 and their regression checks: [FINDINGS.md](FINDINGS.md).

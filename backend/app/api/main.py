@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
 from typing import Literal
@@ -8,6 +9,8 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from redis.asyncio import Redis
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy import and_, desc, func, nulls_last, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -84,15 +87,17 @@ async def list_games(
     order: Literal["asc", "desc"] = "desc",
     archived: bool = False,
     top: bool = False,
-    limit: int = Query(48, le=200),
-    offset: int = 0,
+    limit: int = Query(48, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     session: AsyncSession = Depends(db),
 ):
     where = []
     if not archived:
         where.append(Game.archived_at.is_(None))
     if q:
-        where.append(or_(Game.title.ilike(f"%{q}%"), func.similarity(Game.title, q) > 0.3))
+        q = q[:200]  # longer is not a title; trigram similarity on megabytes is just load
+        literal = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")  # "%" means a percent sign
+        where.append(or_(Game.title.ilike(f"%{literal}%", escape="\\"), func.similarity(Game.title, q) > 0.3))
     if platform:
         where.append(Game.platforms.any(GamePlatform.name.in_(platform)))
     if top:  # Metacritic's "New Releases" block, in its own order
@@ -177,8 +182,8 @@ async def game_reviews(
     kind: Literal["critic", "user"] = "critic",
     platform: str | None = None,
     sort: Literal["date", "score"] = "date",
-    limit: int = Query(20, le=100),
-    offset: int = 0,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     session: AsyncSession = Depends(db),
 ):
     g = await _game_or_404(session, slug)
@@ -194,6 +199,11 @@ async def game_reviews(
          "date": r.date, "quote": r.quote, "url": r.url, "spoiler": r.spoiler} for r in rows]}
 
 
+def client_ip(request: Request) -> str:
+    """The visitor's address: nginx in front of the api passes it as X-Real-IP (the api itself is not exposed)."""
+    return (request.headers.get("x-real-ip") or (request.client.host if request.client else "unknown"))[:64]
+
+
 def client_id(request: Request) -> str:
     """Anonymous id the web app keeps in localStorage; the address is a fallback for other clients."""
     cid = (request.headers.get("x-client-id") or "").strip()[:64]
@@ -202,7 +212,9 @@ def client_id(request: Request) -> str:
 
 @app.get("/api/deep/quota")
 async def deep_quota_status(request: Request, session: AsyncSession = Depends(db)):
-    return (await deep_quota(session, settings, client_id(request), clock.now())).as_dict()
+    quota = await deep_quota(session, settings, client_id(request), clock.now(), client_ip(request))
+    await session.commit()  # keeps the lost analyses it released
+    return quota.as_dict()
 
 
 @app.post("/api/games/{slug}/deep-analyze", status_code=202)
@@ -223,13 +235,18 @@ async def start_deep(slug: str, request: Request, session: AsyncSession = Depend
 
     user = client_id(request)
     await session.execute(text("SELECT pg_advisory_xact_lock(4343)"))  # two clicks at once must not both pass
-    quota = await deep_quota(session, settings, user, now)
+    quota = await deep_quota(session, settings, user, now, client_ip(request))
     if quota.reason:
         raise HTTPException(429, detail=quota.reason)
-    row = DeepAnalysis(game_id=g.id, status="queued", requested_by=user)
+    row = DeepAnalysis(game_id=g.id, status="queued", requested_by=user, requested_ip=client_ip(request))
     session.add(row)
     await session.commit()
-    await request.app.state.arq.enqueue_job("deep_analyze", row.id)
+    try:
+        await request.app.state.arq.enqueue_job("deep_analyze", row.id)
+    except Exception as e:  # noqa: BLE001 - the queue is down: give the slot back instead of a row queued forever
+        row.status, row.error = "lost", f"Очередь задач недоступна: {type(e).__name__}"
+        await session.commit()
+        raise HTTPException(503, detail="Очередь задач недоступна, попробуйте позже") from None
     return {"id": row.id, "status": row.status, "cached": False, "left": quota.left - 1}
 
 
@@ -244,7 +261,7 @@ async def start_run(body: RunRequest, request: Request):
 
 
 @app.get("/api/pipeline/runs")
-async def runs(limit: int = 20, session: AsyncSession = Depends(db)):
+async def runs(limit: int = Query(20, ge=1, le=200), session: AsyncSession = Depends(db)):
     rows = (await session.execute(select(PipelineRun).order_by(desc(PipelineRun.started_at)).limit(limit))).scalars()
     return [{"id": r.id, "kind": r.kind, "status": r.status, "started_at": r.started_at,
              "finished_at": r.finished_at, "stats": r.stats} for r in rows]
@@ -263,20 +280,28 @@ async def pipeline_stats(request: Request, session: AsyncSession = Depends(db)):
 
 
 @app.get("/api/events/stream")
-async def events_stream(request: Request, history: int = Query(300, le=2000)):
-    """Server-Sent Events: the last `history` events, then live ones. Resumes from Last-Event-ID."""
+async def events_stream(request: Request, history: int = Query(300, ge=0, le=2000)):
+    """Server-Sent Events: the last `history` events, then live ones. Resumes from Last-Event-ID.
+    While Redis is unreachable the stream stays open with keepalives and picks up again once it is back,
+    instead of dropping the connection into a reconnect loop."""
     redis: Redis = request.app.state.redis
     stream = settings.events_stream
 
     async def gen():
         last_id = request.headers.get("last-event-id")
-        if not last_id:
-            backlog = await redis.xrevrange(stream, count=history)
-            for eid, fields in reversed(backlog):
-                yield f"id: {eid}\ndata: {fields['data']}\n\n"
-            last_id = backlog[0][0] if backlog else "$"
+        yield "retry: 5000\n\n"
         while not await request.is_disconnected():
-            res = await redis.xread({stream: last_id}, block=15000, count=500)
+            try:
+                if not last_id:
+                    backlog = await redis.xrevrange(stream, count=history) if history else []
+                    for eid, fields in reversed(backlog):
+                        yield f"id: {eid}\ndata: {fields['data']}\n\n"
+                    last_id = backlog[0][0] if backlog else "$"
+                res = await redis.xread({stream: last_id}, block=15000, count=500)
+            except (RedisConnectionError, RedisTimeoutError):
+                yield ": events unavailable, retrying\n\n"
+                await asyncio.sleep(5)
+                continue
             if not res:
                 yield ": keepalive\n\n"
                 continue

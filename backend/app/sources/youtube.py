@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from app.core import tape
+from app.core import faults, tape
 
 API = "https://www.googleapis.com/youtube/v3"
 SEARCH_RESULTS = 15
@@ -135,6 +135,11 @@ class YouTube:
         await self.http.aclose()
 
     async def _get(self, path: str, params: dict) -> dict:
+        if kind := faults.pick("youtube"):
+            try:
+                return self._json_of(faults.http_response(kind, f"{API}{path}"))
+            except httpx.HTTPError as e:
+                raise YouTubeError(f"YouTube Data API недоступен: {type(e).__name__}") from None
         return await tape.call("youtube", {"path": path, "params": params}, lambda: self._get_live(path, params),
                                summary=f"{path} {params.get('q') or params.get('id', '')}"[:200])
 
@@ -143,6 +148,10 @@ class YouTube:
             r = await self.http.get(path, params=params)
         except httpx.HTTPError as e:
             raise YouTubeError(f"YouTube Data API недоступен: {type(e).__name__}") from None
+        return self._json_of(r)
+
+    @staticmethod
+    def _json_of(r: httpx.Response) -> dict:
         if r.status_code != 200:
             reason = ""
             try:
@@ -151,7 +160,10 @@ class YouTube:
             except Exception:  # noqa: BLE001, S110 - only the reason is wanted, the body may be anything
                 pass
             raise YouTubeError(f"YouTube Data API: {r.status_code} {reason}".strip())
-        return r.json()
+        try:
+            return r.json()
+        except ValueError:
+            raise YouTubeError("YouTube Data API: ответ не JSON") from None
 
     async def search(self, game_title: str) -> list[Video]:
         found = await self._get("/search", {

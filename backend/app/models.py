@@ -178,6 +178,7 @@ class DeepAnalysis(Base):
     duration_s: Mapped[int | None] = mapped_column(Integer)  # full video: in case Google counts its 8 h/day by it
     clip_s: Mapped[int | None] = mapped_column(Integer)  # seconds actually sent to the model
     requested_by: Mapped[str | None] = mapped_column(String(64))  # anonymous client id, for the per-user cap
+    requested_ip: Mapped[str | None] = mapped_column(String(64))  # the per-address cap: client ids cost nothing to forge
     tokens_in: Mapped[int] = mapped_column(Integer, default=0)
     tokens_out: Mapped[int] = mapped_column(Integer, default=0)
     facts: Mapped[dict | None] = mapped_column(JSONB)
@@ -206,6 +207,7 @@ class PipelineRun(Base):
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
     kind: Mapped[str] = mapped_column(String(20))  # bootstrap | hourly | sweep
+    owner: Mapped[str] = mapped_column(String(20), default="worker")  # worker | cli: who may declare it lost
     status: Mapped[str] = mapped_column(String(20), default="running")
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

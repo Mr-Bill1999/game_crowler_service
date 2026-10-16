@@ -69,6 +69,7 @@ class Settings(BaseSettings):
     deep_max_video_s: int = 3 * 3600
     deep_daily_pool: int = 5  # new deep analyses per quota day for all users together; cached ones are free
     deep_per_user: int = 2
+    deep_per_ip: int = 3  # a new X-Client-Id is free to make up; an address is not
     deep_reuse_days: int = 7  # a finished analysis is served to everyone for this long
     deep_est_tokens: int = 36_000  # 3 clips x 5 min at 1 frame / 5 s, low resolution, plus the summary
     llm_daily_tokens: int = 1_160_000  # most the free key has served in a day without refusing: a floor, not the cap
@@ -81,6 +82,8 @@ class Settings(BaseSettings):
     tape_dir: Path = Path(__file__).parents[2] / "tapes"
     frozen_now: datetime | None = None  # ISO 8601 with offset; None = real time
     cron_enabled: bool = True  # the stand runs cycles on command, not on the clock
+    faults: str = ""  # stand only: injected failures of external services, syntax in app/core/faults.py
+    fault_seed: int = 1
 
     @field_validator("frozen_now", "gemini_api_key", "youtube_api_key", mode="before")
     @classmethod

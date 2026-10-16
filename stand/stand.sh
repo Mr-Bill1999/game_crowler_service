@@ -7,6 +7,7 @@
 #   stand/stand.sh record          reset + one hourly cycle with GA_TAPE_MODE=auto: live calls that are missing get recorded
 #   stand/stand.sh replay          reset + the same cycle with GA_TAPE_MODE=replay: no external call at all
 #   stand/stand.sh mode <m>        restart api and worker in tape mode live|record|replay|auto
+#   stand/stand.sh faults "<spec>" inject failures of external services (syntax: backend/app/core/faults.py); "off" stops
 #   stand/stand.sh cycle           one hourly cycle (+ the analyses and facets it queues) in the current mode
 #   stand/stand.sh report          what the stand holds now, tapes per source, tape misses
 #   stand/stand.sh cli <args>      python -m app.cli <args> inside the stand
@@ -17,10 +18,12 @@ cd "$(dirname "$0")"
 SEED=seed/seed.dump
 FROZEN=seed/frozen_now
 MODE_FILE=seed/tape_mode
+FAULTS_FILE=seed/faults
 
 frozen_now() { [[ -f $FROZEN ]] && cat "$FROZEN" || true; }
 tape_mode() { [[ -f $MODE_FILE ]] && cat "$MODE_FILE" || echo replay; }
-dc() { GA_FROZEN_NOW="$(frozen_now)" GA_TAPE_MODE="$(tape_mode)" docker compose "$@"; }
+faults_spec() { [[ -f $FAULTS_FILE ]] && cat "$FAULTS_FILE" || true; }
+dc() { GA_FROZEN_NOW="$(frozen_now)" GA_TAPE_MODE="$(tape_mode)" GA_FAULTS="$(faults_spec)" docker compose "$@"; }
 psql_stand() { dc exec -T postgres psql -U ga -d gameanalytics -Atc "$1"; }
 
 set_mode() {
@@ -82,7 +85,12 @@ report() {
 cmd=${1:-help}
 shift || true
 case $cmd in
-  up) dc up -d --build ;;
+  up)
+    dc up -d --build
+    # a separate database for backend/tests/integration, so tests never touch the snapshot
+    dc exec -T postgres psql -U ga -d postgres -tc "select 1 from pg_database where datname='ga_test'" | grep -q 1 \
+      || dc exec -T postgres createdb -U ga ga_test
+    ;;
   seed)
     mkdir -p seed
     docker exec gameanalytics-postgres-1 pg_dump -U ga -Fc gameanalytics > "$SEED"
@@ -91,6 +99,12 @@ case $cmd in
     ;;
   reset) reset ;;
   mode) set_mode "${1:?mode: live|record|replay|auto}" ;;
+  faults)
+    mkdir -p seed
+    if [[ ${1:-off} == off ]]; then rm -f "$FAULTS_FILE"; else echo "$1" > "$FAULTS_FILE"; fi
+    dc up -d api worker >/dev/null
+    echo "faults: $(faults_spec || true)"
+    ;;
   cycle) cycle ;;
   record) set_mode auto; reset; cycle; report ;;
   replay) set_mode replay; reset; cycle; report ;;

@@ -24,7 +24,8 @@ RUNS = {"hourly": tasks.run_hourly, "bootstrap": tasks.run_bootstrap, "sweep": t
 
 async def analyze(slugs: list[str]) -> None:
     pool = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
-    ctx: dict = {"redis": pool}
+    ctx: dict = {"redis": pool, "cli": True}
+    tasks.ctx_owner.set("cli")
     await tasks.startup(ctx)
     try:
         if "llm" not in ctx:
@@ -59,7 +60,8 @@ async def main() -> None:
             job = await pool.enqueue_job(RUNS[a.run].__name__, *args, _job_id=f"manual:{a.run}")
             print("queued" if job else "already queued or running")
             return
-        ctx: dict = {"redis": pool}
+        ctx: dict = {"redis": pool, "cli": True}
+        tasks.ctx_owner.set("cli")
         await tasks.startup(ctx)
         try:
             print(json.dumps(await RUNS[a.run](ctx, *args), ensure_ascii=False, indent=2))

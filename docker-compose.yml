@@ -1,5 +1,6 @@
 services:
   postgres:
+    restart: unless-stopped
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: ga
@@ -13,30 +14,38 @@ services:
       retries: 20
 
   redis:
+    restart: unless-stopped
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     ports: ["6379:6379"]
     volumes: [redisdata:/data]
 
   api:
+    restart: unless-stopped
     build: ./backend
-    environment: &backend-env
-      GA_DATABASE_URL: postgresql+asyncpg://ga:ga@postgres:5432/gameanalytics
-      GA_REDIS_URL: redis://redis:6379/0
+    env_file: ./backend/.env  # API keys; the lines below override what is local-only there
+    environment:
+      <<: &backend-env
+        GA_DATABASE_URL: postgresql+asyncpg://ga:ga@postgres:5432/gameanalytics
+        GA_REDIS_URL: redis://redis:6379/0
+      WEB_CONCURRENCY: ${GA_API_WORKERS:-2}  # uvicorn processes; one tops out near 350 req/s (stand/load.py)
     ports: ["8000:8000"]
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_started}
 
   worker:
+    restart: unless-stopped
     build: ./backend
     command: ["arq", "app.pipeline.tasks.WorkerSettings"]
+    env_file: ./backend/.env
     environment: *backend-env
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_started}
 
   web:
+    restart: unless-stopped
     build: ./frontend
     ports: ["8080:80"]
     depends_on: [api]

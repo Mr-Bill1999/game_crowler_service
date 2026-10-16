@@ -49,5 +49,7 @@ MIGRATIONS = [
     "ALTER TABLE deep_analyses ADD COLUMN IF NOT EXISTS tokens_in integer NOT NULL DEFAULT 0",
     "ALTER TABLE deep_analyses ADD COLUMN IF NOT EXISTS tokens_out integer NOT NULL DEFAULT 0",
     "CREATE INDEX IF NOT EXISTS ix_deep_analyses_created ON deep_analyses (created_at)",
+    "ALTER TABLE deep_analyses ADD COLUMN IF NOT EXISTS requested_ip varchar(64)",
+    "ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS owner varchar(20) NOT NULL DEFAULT 'worker'",
     "CREATE INDEX IF NOT EXISTS ix_analyses_created ON analyses (created_at)",
 ]
