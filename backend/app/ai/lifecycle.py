@@ -14,13 +14,13 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai import checks
 from app.ai.base import REVIEW_SUMMARY_SCHEMA, LLMProvider, LLMResult
 from app.ai.prompts import SYSTEM, UPDATE_SYSTEM, format_review, lean_summary_prompt, update_prompt
 from app.ai.selection import critic_stats, scale_for, score_stats, stratified_sample, substantive
 from app.models import Analysis, Game, RawResponse, Review
 
 MIN_TEXTS = {"critic": 3, "user": 5}
-RUSSIAN_REMINDER = "\n\nВажно: весь разбор, кроме цитат, должен быть на русском языке."
 
 
 @dataclass
@@ -76,16 +76,23 @@ async def metacritic_user_summary(session: AsyncSession, slug: str) -> dict | No
 
 
 async def _generate(provider: LLMProvider, *, system: str, prompt: str, model: str, thinking: str | None,
-                    run: KindRun) -> dict:
-    """One call, retried once if the summary came back in another language (seen in 3 of 32 test answers)."""
+                    run: KindRun, title: str, stats: str, texts: list[str]) -> dict:
+    """One call; one more when the answer has a fixable problem (wrong language, misspelled title, talk of "the
+    sample", a percentage not in the data), then repairs that need no model: quotes snapped to the reviews.
+    Whatever is still wrong is kept in "_checks" for monitoring."""
     r = await provider.generate_json(system=system, prompt=prompt, schema=REVIEW_SUMMARY_SCHEMA, model=model,
                                      thinking_level=thinking)
     run.calls.append(r)
-    if russian_share(r.data.get("summary", "")) < 0.5:
-        r = await provider.generate_json(system=system, prompt=prompt + RUSSIAN_REMINDER,
+    found = checks.problems(r.data, title=title, stats=stats, russian_share=russian_share)
+    if found:
+        r = await provider.generate_json(system=system, prompt=prompt + checks.retry_note(found, title),
                                          schema=REVIEW_SUMMARY_SCHEMA, model=model, thinking_level=thinking)
         run.calls.append(r)
-    return r.data
+    data = checks.finish(r.data, title=title, texts=texts)
+    left = checks.problems(data, title=title, stats=stats, russian_share=russian_share)
+    if left:
+        data["_checks"] = [str(p) for p in left]
+    return data
 
 
 async def analyze_kind(provider: LLMProvider, g: Game, kind: str, reviews: list[Review], prev: Analysis | None,
@@ -102,7 +109,8 @@ async def analyze_kind(provider: LLMProvider, g: Game, kind: str, reviews: list[
             stats = score_stats(reviews, user_mc) if kind == "user" else critic_stats(reviews, g.metascore)
             run.mode, run.read = "first", len(sample)
             run.data = await _generate(provider, system=SYSTEM, prompt=lean_summary_prompt(
-                g, kind, [format_review(r) for r in sample], stats, len(pool)), model=model, thinking=thinking, run=run)
+                g, kind, [format_review(r) for r in sample], stats, len(pool)), model=model, thinking=thinking, run=run,
+                title=g.title, stats=stats, texts=[r.quote or "" for r in sample])
             return run
 
         fresh = [r for r in reviews if r.fetched_at and r.fetched_at > prev.watermark]
@@ -114,7 +122,9 @@ async def analyze_kind(provider: LLMProvider, g: Game, kind: str, reviews: list[
         stats = score_stats(reviews, user_mc) if kind == "user" else critic_stats(reviews, g.metascore)
         run.mode, run.read = "update", len(new)
         run.data = await _generate(provider, system=UPDATE_SYSTEM, prompt=update_prompt(
-            g, kind, prev.payload, [format_review(r) for r in new], stats), model=model, thinking=thinking, run=run)
+            g, kind, prev.payload, [format_review(r) for r in new], stats), model=model, thinking=thinking, run=run,
+            title=g.title, stats=stats,
+            texts=[r.quote or "" for r in new] + list(prev.payload.get("notable_quotes") or []))
     except Exception as e:  # noqa: BLE001  a failed kind must not lose the other one
         run.error = f"{type(e).__name__}: {e}"[:500]
         run.mode = "error"

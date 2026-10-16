@@ -6,6 +6,7 @@ Picked by the blind similarity experiment, backend/eval/results/similarity-v1/re
 """
 
 import hashlib
+import re
 
 from app.models import Game
 
@@ -98,3 +99,77 @@ def source_hash(g: Game) -> str:
     """The essence is rebuilt only when what it was made from changes."""
     src = "\n".join([g.title or "", ",".join(g.genres or []), " ".join((g.description or "").split())])
     return hashlib.sha256(src.encode()).hexdigest()
+
+
+# The finisher: what the model left out but the texts say outright. Each tag is added when one of its words occurs
+# in the Metacritic genres, the essence's genre and gameplay, or the store description. Tags are only added, never
+# removed: the model's reading stands, the texts fill its gaps (Castlevania: "метроидвания" in its own genre line,
+# no metroidvania tag).
+TAG_WORDS: dict[str, tuple[str, ...]] = {
+    "mechanics:metroidvania": ("metroidvania", "метроидван"),
+    "mechanics:roguelike-runs": ("roguelike", "roguelite", "rogue-like", "rogue-lite", "рогалик", "роглайк", "рогалайт"),
+    "mechanics:visual-novel": ("visual novel", "визуальная новелла", "визуальной новелл"),
+    "mechanics:tower-defense": ("tower defense", "tower defence", "tower-defense"),
+    "mechanics:deck-building": ("deckbuild", "deck-build", "deck build", "колодострое"),
+    "mechanics:card-battle": ("card battle", "карточн"),
+    "mechanics:soulslike-combat": ("soulslike", "souls-like", "соулслайк", "соулс-лайк"),
+    "mechanics:bullet-hell": ("bullet hell", "bullet-hell", "bullet heaven", "буллет-хелл"),
+    "mechanics:rhythm": ("rhythm", "ритм-игр", "ритмическ"),
+    "mechanics:racing": ("racing", "racer", "гонк", "гоночн"),
+    "mechanics:fishing": ("fishing", "рыбалк"),
+    "mechanics:farming": ("farming", "фермерск", "ферма"),
+    "mechanics:city-building": ("city build", "city-build", "градостро"),
+    "mechanics:point-and-click": ("point-and-click", "point and click", "point & click"),
+    "mechanics:hidden-objects": ("hidden object", "hidden-object", "поиск предметов"),
+    "mechanics:open-world": ("open world", "open-world", "открытый мир", "открытом мире", "открытого мира"),
+    "mechanics:stealth": ("stealth", "стелс"),
+    "mechanics:platforming": ("platformer", "платформер"),
+    "mechanics:turn-based-tactics": ("turn-based tactic", "tactical rpg", "tactics rpg", "пошаговая тактик"),
+    "mechanics:real-time-strategy": ("real-time strategy", "стратегия в реальном времени"),
+    "mechanics:business-tycoon": ("tycoon", "тайкун"),
+    "mechanics:fighting": ("fighting game", "fighter", "файтинг", "2d fighting", "3d fighting"),
+    "mechanics:party-minigames": ("party game", "party-game", "игра для вечеринок"),
+    "mechanics:idle-incremental": ("idle game", "incremental", "инкрементал", "кликер"),
+    "mechanics:monster-collecting": ("monster collect", "creature collect", "monster-taming", "коллекционирование монстр"),
+    "mechanics:flight": ("flight sim", "flight combat", "авиасим"),
+}
+FINISH_CAP = 8  # the model gives at most 6 mechanics; the finisher may add up to two more
+
+
+def _norm_words(s: str) -> str:
+    s = (s or "").lower().replace("ё", "е")
+    s = re.sub(r"(\d)[,.](\d{3})\b", r"\1\2", s)  # 40,000 -> 40000
+    s = re.sub(r"\b(\d+)k\b", r"\g<1>000", s)  # 40k -> 40000
+    return " " + re.sub(r"[^\w]+", " ", s).strip() + " "
+
+
+def series_in_title(title: str, known: list[str]) -> str | None:
+    """The longest known series whose name occurs in the title as whole words: "Disney/Pixar Toy Story: Retro Roundup!"
+    is in "Toy Story". Titles only: store texts name other franchises too ("from the makers of Spider-Man")."""
+    t = _norm_words(title)
+    hits = [s for s in known if len(s.strip()) >= 4 and _norm_words(s).strip() and _norm_words(s) in t]
+    return max(hits, key=len) if hits else None
+
+
+def finish_essence(e: dict, *, title: str, genres: list[str], description: str, known_series: list[str]) -> dict:
+    """Series and tags the texts state outright; changes are listed in e["_finished"]."""
+    e = dict(e)
+    added: list[str] = []
+    own = (e.get("series") or "").strip()
+    # a known series named in the title wins over an empty or longer variant ("Disney/Pixar Toy Story" -> "Toy Story")
+    found = series_in_title(title, [s for s in known_series if s])
+    if found and (not own or (_norm_words(found) in _norm_words(own) and _norm_words(found) != _norm_words(own))):
+        e["series"] = found
+        added.append(f"series:{found}")
+    text = _norm_words(" ".join([*(genres or []), e.get("genre", ""), e.get("gameplay", ""), description or ""]))
+    for tag, words in TAG_WORDS.items():
+        group, value = tag.split(":", 1)
+        current = e.get(group) or []
+        if value in current or len(current) >= FINISH_CAP:
+            continue
+        if any(" " + _norm_words(w).strip() in text for w in words):  # from a word's start: not "embracer"
+            e[group] = [*current, value]
+            added.append(tag)
+    if added:
+        e["_finished"] = sorted(set(e.get("_finished", [])) | set(added))
+    return e

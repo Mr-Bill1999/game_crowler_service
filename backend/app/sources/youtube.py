@@ -13,11 +13,17 @@ import httpx
 from app.core import faults, tape
 
 API = "https://www.googleapis.com/youtube/v3"
-SEARCH_RESULTS = 15
+RESULTS_PER_QUERY = 10
 MIN_VIDEO_S = 10 * 60
 SILENT = re.compile(r"no[\s-]*(?:commentary|talking|voice)|without commentary|silent playthrough|\bnc\b|"
                     r"без\s+комментари|без\s+слов", re.IGNORECASE)
 SKIP_WORDS = re.compile(r"\b(trailer|teaser|reveal|soundtrack|ost|review|reaction|shorts|livestream)\b", re.IGNORECASE)
+LETS_PLAY = re.compile(r"walkthrough|let'?s\s*play|playthrough|gameplay|\bpart\s*\d|\bep(?:isode)?\.?\s*\d|full\s*game|"
+                       r"\bblind\b|\bstream\b|прохождени|летсплей|часть\s*\d", re.IGNORECASE)
+DEMO = re.compile(r"\b(demo|prologue|playtest|beta|alpha)\b|демо", re.IGNORECASE)
+STOP = {"the", "of", "a", "an", "and", "edition", "remastered", "remake", "deluxe", "complete", "definitive", "gold",
+        "ultimate", "collection", "bundle", "goty", "director", "directors", "cut", "enhanced"}
+ROMAN = {"ii": "2", "iii": "3", "iv": "4", "v": "5", "vi": "6", "vii": "7", "viii": "8", "ix": "9", "x": "10"}
 _TS = re.compile(r"^\s*[\[(]?((?:\d{1,2}:)?\d{1,2}:\d{2})[\])]?\s*[-–—:|]?\s*(.+)$")
 
 
@@ -80,15 +86,32 @@ def parse_chapters(description: str, duration_s: int) -> list[tuple[int, str]]:
 
 
 def _words(s: str) -> list[str]:
-    return re.findall(r"[a-z0-9]+", s.lower().replace("'", ""))
+    """Words for matching titles: 40,000 and 40K are one number, Roman numerals are numbers, apostrophes go."""
+    s = (s or "").lower().replace("'", "").replace("’", "")
+    s = re.sub(r"(\d)[,.](\d{3})\b", r"\1\2", s)
+    s = re.sub(r"\b(\d+)k\b", r"\g<1>000", s)
+    return [ROMAN.get(w, w) for w in re.findall(r"[a-z0-9]+", s)]
+
+
+def required_words(game_title: str) -> tuple[set[str], set[str]]:
+    """(numbers, words) a video title must have. With a subtitle ("Warhammer 40,000: Boltgun 2") the part after the
+    colon is the game and the franchise before it is optional: videos say "Boltgun 2", "WH40K Boltgun 2". Without
+    one, the whole title counts. Numbers always count: "2" is what tells Boltgun 2 from Boltgun."""
+    core = game_title.rsplit(":", 1)[-1] if ":" in game_title else game_title
+    words = [w for w in _words(core) if w not in STOP]
+    if not any(not w.isdigit() and len(w) >= 3 for w in words):  # "Deluxe Edition" after the colon names nothing
+        words = [w for w in _words(game_title) if w not in STOP]
+    return {w for w in words if w.isdigit()}, {w for w in words if not w.isdigit()}
 
 
 def title_matches(game_title: str, video_title: str) -> bool:
-    """Every significant word of the game's title is in the video's title ("Marvel's Wolverine" → marvels, wolverine)."""
-    stop = {"the", "of", "a", "an", "and", "edition", "remastered", "remake", "deluxe", "complete", "definitive"}
-    need = [w for w in _words(game_title) if w not in stop] or _words(game_title)
+    numbers, words = required_words(game_title)
     have = set(_words(video_title))
-    return all(w in have for w in need)
+    if not numbers <= have:
+        return False
+    # short titles must be there whole; a long one may lose its brand ("Toy Story 3" without "Disney/Pixar")
+    need = len(words) if len(words) <= 3 else -(-len(words) // 2)
+    return len(words & have) >= max(1, need)
 
 
 def is_silent(v: Video) -> bool:
@@ -96,34 +119,51 @@ def is_silent(v: Video) -> bool:
     return bool(SILENT.search(f"{v.title}\n{v.description[:500]}"))
 
 
-def pick_video(game_title: str, videos: list[Video], prefer_s: int, max_s: int) -> Video | None:
-    """Most viewed real let's play of this game: right title, not a trailer or a review, long enough to show play.
-    A video with the author's commentary wins over a silent one, since opinions are half of what we report; among
-    those, videos up to `prefer_s` win, in case the daily YouTube allowance counts whole videos."""
-    ok = [v for v in videos if title_matches(game_title, v.title) and not SKIP_WORDS.search(v.title)
-          and MIN_VIDEO_S <= v.duration_s <= max_s]
-    if not ok:
-        return None
-    return max(ok, key=lambda v: (not is_silent(v), v.duration_s <= prefer_s, v.views))
+def why_not(game_title: str, v: Video, *, min_views: int, max_s: int, released: bool) -> str | None:
+    """Why a video is not a let's play of this game worth watching, or None when it is."""
+    if not title_matches(game_title, v.title):
+        return "другая игра или не то название"
+    if SKIP_WORDS.search(v.title):
+        return "трейлер, обзор или стрим"
+    if released and DEMO.search(v.title):
+        return "демо, игра уже вышла"
+    if v.duration_s < MIN_VIDEO_S:
+        return "короче 10 минут"
+    if v.duration_s > max_s:
+        return "длиннее 8 часов"
+    if v.views < min_views:
+        return f"меньше {min_views} просмотров"
+    return None
 
 
-def pick_clips(v: Video, n: int, clip_s: int) -> list[Clip]:
-    """n clips spread over the video: by chapters when it has them, otherwise at 10%, 45% and 80% of its length.
-    The first minutes are skipped either way: intros, menus and logos say little about the game."""
+def pick_video(game_title: str, videos: list[Video], *, min_views: int, max_s: int, released: bool) -> Video | None:
+    """The most viewed real let's play of this game: titled like one, with the author's commentary if possible (opinions
+    are half of what we report). None rather than a weak video: "no let's plays yet" is the honest answer."""
+    ok = [v for v in videos if why_not(game_title, v, min_views=min_views, max_s=max_s, released=released) is None]
+    # a let's play by its title first (essays and reviews rarely say "walkthrough" or "part 1"), then a voice, then views
+    return max(ok, key=lambda v: (bool(LETS_PLAY.search(v.title)), not is_silent(v), v.views)) if ok else None
+
+
+def pick_clips(v: Video, total_s: int = 1200, min_s: int = 300, max_s: int = 390) -> list[Clip]:
+    """About `total_s` of the video in clips of min_s..max_s, spread over all of it: three of 6.5 min for a video up
+    to an hour, four of 5 min for a longer one, by chapters when it has them. The opening minutes are skipped:
+    intros, menus and logos say little about the game. A short video gets proportionally less."""
+    n = 3 if v.duration_s <= 3600 else 4
+    clip_s = max(min_s, min(max_s, total_s // n))
     clip_s = min(clip_s, max(60, v.duration_s // (n + 1)))
     if v.chapters and len(v.chapters) > n:
         body = v.chapters[1:]  # chapter 0 is the intro
         idx = sorted({round(i * (len(body) - 1) / max(1, n - 1)) for i in range(n)})
         starts = [(body[i][0], body[i][1]) for i in idx]
     else:
-        fractions = [0.10, 0.45, 0.80] if n == 3 else [(i + 0.5) / n for i in range(n)]
+        fractions = [0.10, 0.45, 0.80] if n == 3 else [0.08, 0.33, 0.58, 0.83]
         starts = [(int(v.duration_s * f), None) for f in fractions]
-    clips = []
-    for s, label in starts:
-        s = min(s, max(0, v.duration_s - clip_s))
-        if clips and s < clips[-1].end_s:
+    clips: list[Clip] = []
+    for start, label in starts:
+        start = min(start, max(0, v.duration_s - clip_s))
+        if clips and start < clips[-1].end_s:
             continue
-        clips.append(Clip(s, min(v.duration_s, s + clip_s), label))
+        clips.append(Clip(start, min(v.duration_s, start + clip_s), label))
     return clips
 
 
@@ -165,11 +205,15 @@ class YouTube:
         except ValueError:
             raise YouTubeError("YouTube Data API: ответ не JSON") from None
 
-    async def search(self, game_title: str) -> list[Video]:
-        found = await self._get("/search", {
-            "part": "snippet", "type": "video", "maxResults": SEARCH_RESULTS, "order": "relevance",
-            "q": f"{game_title} gameplay walkthrough", "videoEmbeddable": "true", "safeSearch": "none"})
-        ids = [i["id"]["videoId"] for i in found.get("items", []) if i.get("id", {}).get("videoId")]
+    async def search(self, queries: list[str], per_query: int = RESULTS_PER_QUERY) -> list[Video]:
+        """Every query (100 units each), then one videos.list for all distinct results (1 unit)."""
+        ids: list[str] = []
+        for q in queries:
+            found = await self._get("/search", {
+                "part": "snippet", "type": "video", "maxResults": per_query, "order": "relevance",
+                "q": q, "videoEmbeddable": "true", "safeSearch": "none"})
+            ids += [i["id"]["videoId"] for i in found.get("items", []) if i.get("id", {}).get("videoId")]
+        ids = list(dict.fromkeys(ids))[:50]  # videos.list takes up to 50 ids
         if not ids:
             return []
         details = await self._get("/videos", {"part": "snippet,statistics,contentDetails", "id": ",".join(ids)})

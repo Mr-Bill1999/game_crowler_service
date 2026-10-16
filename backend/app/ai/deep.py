@@ -48,6 +48,34 @@ tech_issues — заметные технические проблемы: про
 has_commentary — автор комментирует голосом."""
 
 
+QUERY_SCHEMA = {"type": "object", "required": ["queries"],
+                "properties": {"queries": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "string"}}}}
+
+QUERY_SYSTEM = """Ты ищешь на YouTube видеогайд по игре: летсплей или прохождение с живым игровым процессом,
+лучше с комментариями автора. Составь 3 разных поисковых запроса, которыми такие видео находятся лучше всего.
+Пиши запросы так, как их пишут авторы роликов: обычно по-английски; используй сокращения и варианты названия,
+под которыми игру знают игроки (например, «40K» вместо «40,000»), номер части оставляй. Не ищи трейлеры, обзоры,
+новости и демо. Без кавычек и операторов поиска."""
+
+
+def query_prompt(game: Game) -> str:
+    return (f"Игра: {game.title}\nЖанры: {', '.join(game.genres or []) or '—'}\n"
+            f"Дата релиза: {game.release_date or '—'}\nРазработчик: {game.developer or '—'}")
+
+
+async def search_queries(provider: GeminiProvider, game: Game, *, model: str,
+                         thinking_level: str | None) -> tuple[list[str], LLMResult | None]:
+    """Three queries from the model; the plain one if it fails, so a search still happens."""
+    plain = f"{game.title} gameplay walkthrough"
+    try:
+        r = await provider.generate_json(system=QUERY_SYSTEM, prompt=query_prompt(game), schema=QUERY_SCHEMA,
+                                         model=model, thinking_level=thinking_level, max_output_tokens=512)
+    except Exception:  # noqa: BLE001 - the search must not depend on this call
+        return [plain], None
+    queries = [q.strip()[:120] for q in r.data.get("queries", []) if q and q.strip()]
+    return list(dict.fromkeys(queries))[:3] or [plain], r
+
+
 def clock(s: int) -> str:
     h, rest = divmod(max(0, s), 3600)
     m, sec = divmod(rest, 60)

@@ -13,7 +13,7 @@ from redis.asyncio import Redis
 from sqlalchemy import select, update
 
 from app.ai.analyze import essence, load_reviews
-from app.ai.deep import absolute_facts, run_deep
+from app.ai.deep import absolute_facts, run_deep, search_queries
 from app.ai.gemini import GeminiProvider
 from app.ai.lifecycle import analyze_kind, latest_analyses, metacritic_user_summary
 from app.core import clock
@@ -22,7 +22,7 @@ from app.core.db import SessionLocal, init_db
 from app.events.bus import EventBus, current_run_id
 from app.models import Analysis, DeepAnalysis, Game, PipelineRun, SimilarGame
 from app.pipeline.discovery import discover_bootstrap, discover_hourly, discover_sweep
-from app.pipeline.facets import build_essences, embed_pending, stale_games
+from app.pipeline.facets import build_essences, embed_pending, refinish_all, stale_games
 from app.pipeline.ingest import Deps, IngestResult, ingest_game
 from app.pipeline.quota import FREE_STATUSES
 from app.pipeline.similarity import rebuild
@@ -294,9 +294,10 @@ async def update_facets(ctx: dict) -> dict:
     embed = await embed_pending(provider, s, d.sessions, d.bus, clock.now())
     stats = {"essence": essence, **embed}
     async with d.sessions() as session:
+        stats["finished"] = await refinish_all(session)
         empty = await session.scalar(select(SimilarGame.game_id).limit(1)) is None
-        if embed["embedded"] or empty:
-            stats["similar"] = await rebuild(session)
+        if embed["embedded"] or stats["finished"] or empty:
+            stats["similar"] = await rebuild(session, s.similar_min_gameplay)
             await d.bus.emit("facets.similar", **stats["similar"])
     await d.bus.emit("facets.done", essences=essence["ok"], embedded=embed["embedded"], waiting=embed["waiting"])
     return stats
@@ -333,23 +334,28 @@ async def deep_analyze(ctx: dict, deep_id: int) -> None:
                          slug=game.slug, deep_id=deep_id, result=status, error=error,
                          tokens_in=values.get("tokens_in"), clip_s=values.get("clip_s"))
 
+    queries, qr = await search_queries(provider, game, model=s.llm_model, thinking_level=s.llm_thinking_level)
+    q_in, q_out = (qr.tokens_in, qr.tokens_out) if qr else (0, 0)
     yt = YouTube(s.youtube_api_key)
     try:
-        await d.bus.emit("deep.search", slug=game.slug, query=f"{game.title} gameplay walkthrough")
-        videos = await yt.search(game.title)
+        await d.bus.emit("deep.search", slug=game.slug, queries=queries)
+        videos = await yt.search(queries, s.deep_results_per_query)
     except YouTubeError as e:
-        await finish("search_error", str(e))
+        await finish("search_error", str(e), tokens_in=q_in, tokens_out=q_out)
         return
     finally:
         await yt.aclose()
-    video = pick_video(game.title, videos, s.deep_prefer_video_s, s.deep_max_video_s)
+    released = game.release_date is not None and game.release_date <= clock.now().date()
+    video = pick_video(game.title, videos, min_views=s.deep_min_views, max_s=s.deep_max_video_s, released=released)
     if video is None:
-        await finish("no_video", f"Летсплей не найден среди {len(videos)} видео")
+        await finish("no_video", f"Подходящего летсплея пока нет: просмотрено {len(videos)} видео по {len(queries)} "
+                                 "запросам", tokens_in=q_in, tokens_out=q_out)
         return
-    clips = pick_clips(video, s.deep_clips, s.deep_clip_s)
+    clips = pick_clips(video, s.deep_clip_total_s, s.deep_clip_min_s, s.deep_clip_max_s)
     clip_s = sum(c.length for c in clips)
     await d.bus.emit("deep.video", slug=game.slug, video_id=video.id, title=video.title[:120], views=video.views,
-                     duration_s=video.duration_s, chapters=len(video.chapters) or None, clips=len(clips), clip_s=clip_s)
+                     duration_s=video.duration_s, chapters=len(video.chapters) or None, clips=len(clips), clip_s=clip_s,
+                     candidates=len(videos))
     video_fields = {"video_id": video.id, "video_title": video.title[:500], "views": video.views,
                     "duration_s": video.duration_s, "clip_s": clip_s}
     try:
@@ -366,7 +372,8 @@ async def deep_analyze(ctx: dict, deep_id: int) -> None:
              "clips": [{"start_s": c.start_s, "end_s": c.end_s, "label": c.label} for c in clips],
              "model": r.model, "cost_usd": r.cost_usd}
     status, error = ("done", None) if r.data.get("matches_game") else ("mismatch", "Видео не похоже на эту игру")
-    await finish(status, error, facts=facts, tokens_in=r.tokens_in, tokens_out=r.tokens_out, **video_fields)
+    await finish(status, error, facts={**facts, "queries": queries}, tokens_in=r.tokens_in + q_in,
+                 tokens_out=r.tokens_out + q_out, **video_fields)
 
 
 _s = get_settings()

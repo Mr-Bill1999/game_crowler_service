@@ -15,19 +15,25 @@ from app.models import Review
 
 SUBSTANTIVE_WORDS = 50
 SAMPLE_CAP = 300
+# Each audience on Metacritic's own thresholds: players 0–4 / 5–7 / 8–10 (as in its positive/mixed/negative counts),
+# critics 0–49 / 50–74 / 75–100 (its red / yellow / green). Scaling the player bands to critics put 75–79 in "mixed".
 BANDS = (("негативные 0–4", 0, 4.99), ("смешанные 5–7", 5, 7.99), ("позитивные 8–10", 8, 10))
+CRITIC_BANDS = (("негативные 0–49", 0, 49.99), ("смешанные 50–74", 50, 74.99), ("позитивные 75–100", 75, 100))
 
 
 def word_count(text: str | None) -> int:
     return len(re.findall(r"\w+", text or ""))
 
 
+def bands_for(scale: float = 1.0) -> tuple:
+    """Critic scores (0–100) come with scale=0.1, player scores (0–10) with 1."""
+    return CRITIC_BANDS if scale != 1.0 else BANDS
+
+
 def band(score: float | None, scale: float = 1.0) -> str | None:
-    """Score band on the 0–10 scale; critic scores (0–100) pass scale=0.1."""
     if score is None:
         return None
-    s = score * scale
-    return next(name for name, lo, hi in BANDS if lo <= s <= hi)
+    return next((name for name, lo, hi in bands_for(scale) if lo <= score <= hi), None)
 
 
 def scale_for(kind: str) -> float:
@@ -60,7 +66,7 @@ def stratified_sample(reviews: Sequence[Review], population: Sequence[Review], c
         by_band[band(r.score, scale)].append(r)
     rng = random.Random(seed)
     picked: list[Review] = []
-    for name, _, _ in BANDS:
+    for name, _, _ in bands_for(scale):
         pool = sorted(by_band.get(name, []), key=lambda r: -word_count(r.quote))
         want = min(len(pool), round(cap * share.get(name, 0) / total))
         longest, rest = pool[: want // 2], pool[want // 2:]
@@ -91,8 +97,8 @@ def critic_stats(reviews: Sequence[Review], metascore: int | None) -> str:
     scored = [r for r in reviews if r.score is not None]
     n = len(scored) or 1
     counts = Counter(band(r.score, 0.1) for r in scored)
-    lines = [f"Metascore: {metascore if metascore is not None else 'нет'}. Распределение оценок {len(scored)} рецензий:"]
-    lines += [f"- {name.replace('0–4', '0–49').replace('5–7', '50–79').replace('8–10', '80–100')}: "
-              f"{counts.get(name, 0)} ({round(100 * counts.get(name, 0) / n)}%)" for name, _, _ in BANDS]
+    head = f"Metascore: {metascore if metascore is not None else 'нет'}. Распределение оценок {len(scored)} рецензий"
+    lines = [f"{head} (границы Metacritic):"]
+    lines += [f"- {name}: {counts.get(name, 0)} ({round(100 * counts.get(name, 0) / n)}%)" for name, _, _ in CRITIC_BANDS]
     lines.append("Других процентов не приводи.")
     return "\n".join(lines)

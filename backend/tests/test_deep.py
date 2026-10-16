@@ -34,29 +34,55 @@ def test_title_match_ignores_apostrophes_and_edition_words():
     assert not title_matches("Control Resonant", "Control Ultimate Edition walkthrough")
 
 
+def test_title_match_on_the_boltgun_2_search():
+    t = "Warhammer 40,000: Boltgun 2"
+    assert title_matches(t, "Warhammer 40k: Boltgun 2 Is More of a Good Thing")  # 40k = 40,000
+    assert title_matches(t, "BOLTGUN 2 Gameplay Walkthrough FULL DEMO")  # the franchise is optional
+    assert title_matches(t, "WH40k: Boltgun 2 - Let's Play")
+    assert not title_matches(t, "WARHAMMER 40K Boltgun | Full Game Walkthrough")  # the first game: no "2"
+    assert title_matches("Disney/Pixar Toy Story 3 Complete Edition", "Toy Story 3 Complete Edition Walkthrough")
+    assert not title_matches("Disney/Pixar Toy Story 3 Complete Edition", "Toy Story 2 Walkthrough")
+    assert title_matches("Resident Evil II: Deluxe Edition", "Resident Evil 2 Walkthrough")  # roman numeral
+
+
+def pick(videos, released=True):
+    return pick_video("Marvel's Wolverine", videos, min_views=1000, max_s=12 * 3600, released=released)
+
+
 def test_pick_video_prefers_watchable_lets_plays():
     videos = [
         vid("Marvel's Wolverine - Official Trailer", views=9_000_000, minutes=12),
         vid("Marvel's Wolverine Full Game 4K", views=800_000, minutes=600),
-        vid("Marvel's Wolverine Walkthrough Part 1 (3h)", views=500_000, minutes=170),
         vid("Marvel's Wolverine Walkthrough Part 1", views=200_000, minutes=55),
         vid("Spider-Man 2 walkthrough", views=5_000_000),
     ]
-    assert pick_video("Marvel's Wolverine", videos, 3600, 3 * 3600).duration_s == 55 * 60
-    assert pick_video("Marvel's Wolverine", videos[:3], 3600, 3 * 3600).duration_s == 170 * 60
-    assert pick_video("Marvel's Wolverine", videos[:1], 3600, 3 * 3600) is None
+    assert pick(videos).duration_s == 600 * 60  # long full playthroughs are fine now: we watch 20 minutes of them
+    assert pick(videos[:1]) is None
 
 
-def test_clips_spread_over_the_video_and_skip_the_intro():
-    clips = pick_clips(vid("x", minutes=60), 3, 300)
-    assert [(c.start_s, c.end_s) for c in clips] == [(360, 660), (1620, 1920), (2880, 3180)]
-    short = pick_clips(vid("x", minutes=12), 3, 300)
+def test_demos_low_views_and_silence():
+    demo = vid("Marvel's Wolverine FULL DEMO walkthrough", views=50_000)
+    tiny = vid("Marvel's Wolverine Lets Play Part 1", views=300)
+    assert pick([demo, tiny]) is None  # a demo of a released game, an upload nobody watched: no let's play yet
+    assert pick([demo], released=False) is demo  # before release the demo is what there is
+    silent = vid("Marvel's Wolverine Walkthrough No Commentary", views=900_000)
+    talky = vid("Marvel's Wolverine Let's Play Part 1", views=40_000)
+    assert pick([silent, talky]) is talky
+
+
+def test_clips_take_about_twenty_minutes_spread_over_the_video():
+    hour = pick_clips(vid("x", minutes=60))
+    assert len(hour) == 3 and all(c.length == 390 for c in hour) and sum(c.length for c in hour) == 1170
+    long = pick_clips(vid("x", minutes=300))
+    assert len(long) == 4 and all(c.length == 300 for c in long)
+    assert long[0].start_s > 600 and long[-1].start_s > 4 * 3600  # from the first quarter to the last
+    short = pick_clips(vid("x", minutes=12))
     assert all(c.length == 180 for c in short) and short[-1].end_s <= 720
 
 
 def test_clips_follow_chapters_when_there_are_enough():
     chapters = [(0, "Intro"), (300, "A"), (900, "B"), (1500, "C"), (2100, "D"), (2700, "E")]
-    clips = pick_clips(vid("x", minutes=60, chapters=chapters), 3, 300)
+    clips = pick_clips(vid("x", minutes=60, chapters=chapters))
     assert [(c.start_s, c.label) for c in clips] == [(300, "A"), (1500, "C"), (2700, "E")]
 
 
@@ -78,10 +104,16 @@ def test_fact_timecodes_become_absolute_links():
     assert [f["t"] for f in out] == sorted(f["t"] for f in out)  # listed in viewing order
 
 
-def test_commentary_beats_views_and_length():
-    silent = vid("Castlevania Belmont's Curse Walkthrough Part 1 (PS5 Pro) No Commentary", views=900_000, minutes=30)
-    talky = vid("Castlevania Belmont's Curse - Let's Play Part 1", views=40_000, minutes=95)
-    assert is_silent(silent) and not is_silent(talky)
-    assert pick_video("Castlevania: Belmont's Curse", [silent, talky], 3600, 3 * 3600) is talky
-    assert pick_video("Castlevania: Belmont's Curse", [silent], 3600, 3 * 3600) is silent  # better than nothing
+
+
+def test_silence_is_read_from_title_and_description():
     assert is_silent(vid("Прохождение без комментариев Castlevania"))
+    assert not is_silent(vid("Castlevania Let's Play Part 1"))
+
+
+def test_a_titled_lets_play_beats_an_essay_with_more_views():
+    essay = vid("Marvel's Wolverine Is More of a Good Thing", views=239_000, minutes=21)
+    stream = vid("STREAM ENDS WHEN I BEAT MARVEL'S WOLVERINE", views=4_400, minutes=674)
+    silent = vid("Marvel's Wolverine Full Walkthrough No Commentary", views=6_600, minutes=248)
+    assert pick([essay, stream, silent]) is stream
+    assert pick([essay]) is essay  # an essay is still better than nothing

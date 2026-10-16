@@ -66,8 +66,11 @@ def norm_series(s: str | None) -> str:
     return re.sub(r"[^\w]+", " ", (s or "").lower()).strip()
 
 
-def neighbours(items: list[Item], k: int = TOP_K) -> dict[int, dict[str, list[dict]]]:
-    """For every game: top-k similar games outside its series, and the games of its series, best first."""
+def neighbours(items: list[Item], k: int = TOP_K, min_gameplay: float = -1.0) -> dict[int, dict[str, list[dict]]]:
+    """For every game: top-k similar games outside its series, and the games of its series, best first.
+    The fused score is relative to each game's own candidates, so it ranks but cannot say "nothing fits": the
+    absolute gameplay similarity does. Below `min_gameplay` a candidate is left out of "similar" (blind grades of
+    the experiment: under 0.2 the pair is a miss in 44-93 % of cases and never a strong match)."""
     n = len(items)
     if n < 2:
         return {}
@@ -87,10 +90,14 @@ def neighbours(items: list[Item], k: int = TOP_K) -> dict[int, dict[str, list[di
         for b in np.argsort(-fusion[a]):
             if b == a:
                 continue
-            (same if series[a] and series[b] == series[a] else other).append(int(b))
+            if series[a] and series[b] == series[a]:
+                same.append(int(b))
+            elif signals["gameplay"][a, b] >= min_gameplay:
+                other.append(int(b))
         out[items[a].game_id] = {
             kind: [{"other_id": items[b].game_id, "score": round(float(fusion[a, b]), 4),
-                    "reasons": reasons(items[a], items[b], {s: float(z[s][a, b]) for s in WEIGHTS}, idf_weight)}
+                    "reasons": {**reasons(items[a], items[b], {s: float(z[s][a, b]) for s in WEIGHTS}, idf_weight),
+                                "gameplay": round(float(signals["gameplay"][a, b]), 3)}}
                    for b in lst[:k]]
             for kind, lst in (("similar", other), ("series", same))}
     return out
@@ -102,18 +109,19 @@ def reasons(a: Item, b: Item, zs: dict[str, float], weight: dict[str, float]) ->
     return {"tags": shared[:REASON_TAGS], "signals": {s: round(v, 2) for s, v in zs.items()}}
 
 
-async def rebuild(session: AsyncSession) -> dict:
+async def rebuild(session: AsyncSession, min_gameplay: float = -1.0) -> dict:
     """Recompute every game's lists from the facets that have up-to-date vectors."""
     rows = (await session.execute(select(GameFacets).where(
         GameFacets.gameplay_vec.is_not(None), GameFacets.world_vec.is_not(None),
         GameFacets.embed_hash == GameFacets.source_hash))).scalars().all()
     items = [Item(r.game_id, np.asarray(r.gameplay_vec, dtype=np.float32), np.asarray(r.world_vec, dtype=np.float32),
                   list(r.tags or []), r.series) for r in rows]
-    lists = neighbours(items)
+    lists = neighbours(items, min_gameplay=min_gameplay)
     await session.execute(delete(SimilarGame))
     for game_id, kinds in lists.items():
         for kind, lst in kinds.items():
             for rank, x in enumerate(lst):
                 session.add(SimilarGame(game_id=game_id, kind=kind, rank=rank, **x))
     await session.commit()
-    return {"games": len(items), "series_links": sum(len(v["series"]) for v in lists.values())}
+    return {"games": len(items), "series_links": sum(len(v["series"]) for v in lists.values()),
+            "few_similar": sum(len(v["similar"]) < 3 for v in lists.values())}

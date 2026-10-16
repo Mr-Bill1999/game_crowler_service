@@ -63,3 +63,11 @@ def test_essence_is_rebuilt_only_when_its_sources_change():
     same = Game(title="X", genres=["Action"], description="Fight things. ")
     assert source_hash(g) == source_hash(same)
     assert source_hash(g) != source_hash(Game(title="X", genres=["Action"], description="Build things."))
+
+
+def test_floor_leaves_out_games_that_do_not_play_alike():
+    items = catalogue()
+    loose = [x["other_id"] for x in neighbours(items)[1]["similar"]]
+    strict = [x["other_id"] for x in neighbours(items, min_gameplay=0.5)[1]["similar"]]
+    assert len(strict) < len(loose) and strict[0] == 2  # the one that plays alike stays
+    assert all(x["reasons"]["gameplay"] >= 0.5 for x in neighbours(items, min_gameplay=0.5)[1]["similar"])

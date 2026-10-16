@@ -18,6 +18,7 @@ from app.ai.light_essence import (
     MIN_DESCRIPTION,
     clean_tags,
     essence_prompt,
+    finish_essence,
     flat_tags,
     source_hash,
     texts,
@@ -43,6 +44,8 @@ async def stale_games(session: AsyncSession, limit: int) -> list[Game]:
 
 async def build_essences(provider: GeminiProvider, games: list[Game], s: Settings, sessions, bus: EventBus) -> dict:
     stats = {"ok": 0, "error": 0, "tokens_in": 0, "tokens_out": 0}
+    async with sessions() as session:
+        known_series = await known_series_names(session)
 
     async def one(g: Game) -> None:
         try:
@@ -53,7 +56,8 @@ async def build_essences(provider: GeminiProvider, games: list[Game], s: Setting
             stats["error"] += 1
             await bus.emit("facets.essence", "error", slug=g.slug, error=f"{type(e).__name__}: {e}"[:300])
             return
-        e = clean_tags(r.data)
+        e = finish_essence(clean_tags(r.data), title=g.title, genres=g.genres or [], description=g.description or "",
+                           known_series=known_series)
         async with sessions() as session:
             row = await session.get(GameFacets, g.id) or GameFacets(game_id=g.id)
             row.essence, row.tags, row.series = e, flat_tags(e), (e.get("series") or "").strip()[:200] or None
@@ -107,3 +111,27 @@ async def embed_pending(provider: GeminiProvider, s: Settings, sessions, bus: Ev
         done += len(batch)
         await bus.emit("facets.embed", games=len(batch), texts=len(items), model=s.embed_model)
     return {"embedded": done, "waiting": waiting, "texts_used_today": used + done * len(FACETS)}
+
+
+async def known_series_names(session) -> list[str]:
+    rows = await session.scalars(select(GameFacets.series).where(GameFacets.series.is_not(None)).distinct())
+    return sorted({r for r in rows if r and r.strip()})
+
+
+async def refinish_all(session) -> int:
+    """Run the finisher over every stored essence: a series named later (or a new tag word) reaches older games too.
+    No model is called; returns how many games changed."""
+    known = await known_series_names(session)
+    rows = (await session.execute(select(GameFacets, Game).join(Game, Game.id == GameFacets.game_id))).all()
+    changed = 0
+    for f, g in rows:
+        e = finish_essence(f.essence, title=g.title, genres=g.genres or [], description=g.description or "",
+                           known_series=known)
+        series = (e.get("series") or "").strip()[:200] or None
+        tags = flat_tags(e)
+        if tags != list(f.tags or []) or series != f.series:
+            f.essence, f.tags, f.series = e, tags, series
+            changed += 1
+    await session.commit()
+    return changed
+

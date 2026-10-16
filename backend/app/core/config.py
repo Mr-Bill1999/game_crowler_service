@@ -58,20 +58,23 @@ class Settings(BaseSettings):
     embed_model: str = "gemini-embedding-001"  # the model the similarity experiment was judged on
     embed_batch: int = 44  # texts per request: 22 games x 2 facets; free tier allows 100 texts a minute
     embed_daily_texts: int = 900  # free tier: 1000 texts a day per model, every text in a batch counts
+    similar_min_gameplay: float = 0.2  # below it a game is not offered as similar; see app/pipeline/similarity.py
     facets_per_run: int = 150  # light essences per job: ~13 min at llm_rpm, the rest waits for the next hour
 
     # Deep analyze runs on the same free key: a shared daily pool, and the service's own analyses come first.
     youtube_api_key: str | None = None  # YouTube Data API v3: free, 10 000 units a day, a search costs 100
-    deep_clips: int = 3
-    deep_clip_s: int = 300
+    deep_results_per_query: int = 10  # search.list results for each of the model's 3 queries
+    deep_min_views: int = 1000  # below it a video is someone's upload, not the let's play people watch
+    deep_clip_total_s: int = 1200  # about 20 min of the video in clips of 5..6.5 min, spread over all of it
+    deep_clip_min_s: int = 300
+    deep_clip_max_s: int = 390
     deep_fps: float = 0.2  # one frame every 5 s at low resolution: ~38 tokens per second of video with audio
-    deep_prefer_video_s: int = 3600  # in case Google's 8 h/day of YouTube counts the whole video, not the clips
-    deep_max_video_s: int = 3 * 3600
+    deep_max_video_s: int = 8 * 3600  # free tier: 8 h of YouTube a day, in case whole videos count
     deep_daily_pool: int = 5  # new deep analyses per quota day for all users together; cached ones are free
     deep_per_user: int = 2
     deep_per_ip: int = 3  # a new X-Client-Id is free to make up; an address is not
     deep_reuse_days: int = 7  # a finished analysis is served to everyone for this long
-    deep_est_tokens: int = 36_000  # 3 clips x 5 min at 1 frame / 5 s, low resolution, plus the summary
+    deep_est_tokens: int = 48_000  # ~20 min of clips at ~38 tokens/s, the query call and the answer
     llm_daily_tokens: int = 1_160_000  # most the free key has served in a day without refusing: a floor, not the cap
     llm_safety: float = 0.8
     service_reserve_tokens: int = 190_000  # peak day of review analyses + light essence of ~100 new games + 25% retries

@@ -68,7 +68,7 @@ async def test_answer_in_another_language_is_retried_once():
     p = FakeProvider(replies=["An English summary of the reviews.", RU])
     run = await lc.analyze_kind(p, game(), "user", [user(i, 60, T0) for i in range(6)], None, "m", None)
     assert len(run.calls) == 2 and run.data["summary"] == RU
-    assert lc.RUSSIAN_REMINDER.strip() in p.prompts[1][1]
+    assert "по-русски" in p.prompts[1][1]
 
 
 async def test_critic_scores_are_banded_on_the_100_scale():
@@ -77,4 +77,14 @@ async def test_critic_scores_are_banded_on_the_100_scale():
     p = FakeProvider()
     run = await lc.analyze_kind(p, game(), "critic", critics, None, "m", None)
     assert run.mode == "first"
-    assert "80–100: 2 (67%)" in p.prompts[0][1] and "0–49: 1 (33%)" in p.prompts[0][1]
+    assert "75–100: 2 (67%)" in p.prompts[0][1] and "0–49: 1 (33%)" in p.prompts[0][1]
+
+
+async def test_title_typos_and_talk_of_the_sample_get_one_retry_then_are_repaired():
+    bad = "Иггроки хвалят Gamе Sequel: в нашей выборке 96% довольны."  # Cyrillic "е" in the title
+    p = FakeProvider(replies=[bad, "Игроки хвалят Gamе Sequel."])
+    g = game()
+    g.title = "Game Sequel"
+    run = await lc.analyze_kind(p, g, "user", [user(i, 60, T0) for i in range(6)], None, "m", None)
+    assert len(run.calls) == 2 and "Название игры пиши точно" in p.prompts[1][1] and "выборку" in p.prompts[1][1]
+    assert run.data["summary"] == "Игроки хвалят Game Sequel." and "_checks" not in run.data

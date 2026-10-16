@@ -137,6 +137,8 @@ async def _similar(session: AsyncSession, g: Game) -> dict:
         for sim, other in rows:
             out[sim.kind].append({**game_brief(other), "score": sim.score, "reasons": sim.reasons})
         return {"method": "essence", "items": out["similar"], "series": out["series"]}
+    if await session.get(GameFacets, g.id) is not None:  # read by essence, nothing close enough: say so
+        return {"method": "essence", "items": [], "series": []}
     if not g.genres:
         return {"method": "none", "items": [], "series": []}
     rows = await session.execute(

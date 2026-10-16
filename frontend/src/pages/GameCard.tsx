@@ -372,11 +372,14 @@ function SimilarBlock({ g }: { g: GameDetail }) {
           ? "По сути игры: игровой процесс, теги механик и мир. Под каждой игрой — что у них общего."
           : "Пока по совпадению жанра: суть этой игры ещё не разобрана."}
       </p>
+      {method === "essence" && items.length > 0 && items.length < 3 && (
+        <p className="muted small">Похожих игр в каталоге пока мало: показаны только действительно близкие.</p>
+      )}
       <div className="similar">
         {items.map((s) => (
           <SimilarCard key={s.id} s={s} />
         ))}
-        {items.length === 0 && <p className="muted">Подходящих игр пока нет.</p>}
+        {items.length === 0 && <p className="muted">По сути игры близких в каталоге пока нет.</p>}
       </div>
       {series.length > 0 && (
         <>

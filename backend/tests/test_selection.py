@@ -43,3 +43,11 @@ def test_retry_delay_follows_google_retry_info():
     err = Exception("429 RESOURCE_EXHAUSTED {'details': [{'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '37s'}]}")
     assert 38 <= retry_delay(err, 1) < 40
     assert retry_delay(Exception("503 overloaded"), 1) < 4
+
+
+def test_critic_bands_follow_metacritic_not_scaled_player_bands():
+    from app.ai.selection import critic_stats
+    crit = [Review(id=f"c{i}", game_id=1, kind="critic", score=s, quote="x") for i, s in enumerate((75, 77, 74, 49, 90))]
+    assert band(75, 0.1) == "позитивные 75–100" and band(74, 0.1) == "смешанные 50–74" and band(49, 0.1) == "негативные 0–49"
+    text = critic_stats(crit, 77)
+    assert "позитивные 75–100: 3 (60%)" in text and "смешанные 50–74: 1 (20%)" in text
