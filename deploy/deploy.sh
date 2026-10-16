@@ -7,11 +7,13 @@
 #   deploy/deploy.sh db-copy          replace the server's database with a dump of the local working one
 #   deploy/deploy.sh status | logs [service] | backup
 #
-# Settings: GA_HOST (default root@your-server), GA_KEY (default ~/.ssh/ga_deploy), GA_DIR (default /opt/gameanalytics)
+# Settings: GA_HOST or deploy/.host (user@server, kept out of git), GA_KEY (default ~/.ssh/ga_deploy),
+# GA_DIR (default /opt/gameanalytics)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-HOST=${GA_HOST:-root@your-server}
+HOST=${GA_HOST:-$(cat deploy/.host 2>/dev/null || true)}
+[[ -n $HOST ]] || { echo "set GA_HOST=user@server or write it to deploy/.host" >&2; exit 1; }
 KEY=${GA_KEY:-$HOME/.ssh/ga_deploy}
 DIR=${GA_DIR:-/opt/gameanalytics}
 SSH=(ssh -i "$KEY" -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$HOST")

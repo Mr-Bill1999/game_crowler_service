@@ -81,7 +81,7 @@ cd frontend && npm install && npm run dev
 docker compose up -d --build
 ```
 
-Продакшен — один VPS, Ubuntu 24.04, http://your-server. Используются [deploy/compose.yml](deploy/compose.yml) и
+Продакшен — один VPS на Ubuntu 24.04. Адрес лежит в `deploy/.host` в виде `user@server`; этот файл в git не попадает. Используются [deploy/compose.yml](deploy/compose.yml) и
 [deploy/deploy.sh](deploy/deploy.sh). Вход на сервер только по SSH-ключу `~/.ssh/ga_deploy`, пароль не используется.
 - **Порты.** Снаружи открыт только 80-й, у nginx; Postgres, Redis и API закрыты внутри.
 - **Секреты.** Ключи и случайный пароль базы лежат в `/opt/gameanalytics/deploy/.env` с правами 600, в git их нет.

@@ -22,3 +22,4 @@ backend/tapes/
 # server secrets and dumps never go to git
 deploy/.env
 deploy/backups/
+deploy/.host
