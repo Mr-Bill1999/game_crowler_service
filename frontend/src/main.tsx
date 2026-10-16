@@ -1,0 +1,56 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { BrowserRouter, NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { useEffect } from "react";
+import { Icon } from "./components/Icon";
+import { DevPanel } from "./pages/DevPanel";
+import { GameCard } from "./pages/GameCard";
+import { GamesList } from "./pages/GamesList";
+import { Welcome } from "./pages/Welcome";
+import "./styles.css";
+
+const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: 1 } } });
+
+function Shell() {
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const legacyCatalog = location.pathname === "/" && ["q", "sort", "platform", "archived", "top"].some((key) => params.has(key));
+  const welcome = location.pathname === "/" && !legacyCatalog;
+
+  useEffect(() => { window.scrollTo(0, 0); }, [location.pathname]);
+
+  return (
+    <div className={`shell ${welcome ? "welcome-shell" : ""}`}>
+      <header className="topbar">
+        <NavLink to="/" className="brand">
+          <span className="brand-mark" aria-hidden="true"><span /><span /></span>GameGallery
+        </NavLink>
+        {!welcome && <nav aria-label="Основная навигация">
+          <NavLink to="/games" className={({ isActive }) => isActive || legacyCatalog || location.pathname.startsWith("/game/") ? "active" : undefined}>
+            Каталог
+          </NavLink>
+          <NavLink to="/devpanel">DevPanel<Icon name="arrow-up-right" /></NavLink>
+        </nav>}
+      </header>
+      <main>
+        <Routes>
+          <Route path="/" element={legacyCatalog ? <GamesList /> : <Welcome />} />
+          <Route path="/games" element={<GamesList />} />
+          <Route path="/game/:slug" element={<GameCard />} />
+          <Route path="/devpanel" element={<DevPanel />} />
+        </Routes>
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <Shell />
+      </BrowserRouter>
+    </QueryClientProvider>
+  </React.StrictMode>,
+);

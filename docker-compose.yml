@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ga
+      POSTGRES_PASSWORD: ga
+      POSTGRES_DB: gameanalytics
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ga -d gameanalytics"]
+      interval: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["6379:6379"]
+    volumes: [redisdata:/data]
+
+  api:
+    build: ./backend
+    environment: &backend-env
+      GA_DATABASE_URL: postgresql+asyncpg://ga:ga@postgres:5432/gameanalytics
+      GA_REDIS_URL: redis://redis:6379/0
+    ports: ["8000:8000"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+
+  worker:
+    build: ./backend
+    command: ["arq", "app.pipeline.tasks.WorkerSettings"]
+    environment: *backend-env
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+
+  web:
+    build: ./frontend
+    ports: ["8080:80"]
+    depends_on: [api]
+
+volumes:
+  pgdata:
+  redisdata:

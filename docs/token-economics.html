@@ -1,0 +1,111 @@
+<title>Экономика анализа отзывов</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@700&family=Golos+Text:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: отчёт-расчёт в одну колонку; цифры-ответ сверху, график, разбор причин, сценарии, допущения. */
+:root{--paper:#F3F5F9;--surface:#FFF;--ink:#131823;--muted:#586379;--line:#D7DDE8;--accent:#2C47C0;--accent-soft:#E5E9FA;
+--s-cur:#C2410C;--s-inc:#2C47C0;--good:#1D8A4C;
+--f-display:"Unbounded","Golos Text",system-ui,sans-serif;--f-body:"Golos Text",system-ui,-apple-system,"Segoe UI",sans-serif;--f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--paper:#0E121A;--surface:#161C27;--ink:#E5E9F1;--muted:#97A1B4;--line:#283143;--accent:#8A9DFF;--accent-soft:#1D2648;--s-cur:#D0662F;--s-inc:#6878E6;--good:#43C47B}}
+:root[data-theme="dark"]{color-scheme:dark;--paper:#0E121A;--surface:#161C27;--ink:#E5E9F1;--muted:#97A1B4;--line:#283143;--accent:#8A9DFF;--accent-soft:#1D2648;--s-cur:#D0662F;--s-inc:#6878E6;--good:#43C47B}
+*{box-sizing:border-box}body{background:var(--paper);color:var(--ink);font:15px/1.6 var(--f-body);margin:0;padding-inline:20px}
+.wrap{max-width:1040px;margin:0 auto;padding-block:44px 90px;display:grid;gap:44px}
+h1,h2,h3{font-family:var(--f-display);margin:0;line-height:1.2;text-wrap:balance}h1{font-size:2rem}h2{font-size:1.3rem}h3{font-size:1rem}
+p{margin:0;max-width:72ch}.muted{color:var(--muted)}.eyebrow{font:600 .75rem var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+section{display:grid;gap:16px;min-width:0}ul{margin:0;padding-left:1.2em;display:grid;gap:6px;max-width:78ch}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:grid;gap:4px;align-content:start}
+.kpi b{font:600 1.5rem var(--f-mono);font-variant-numeric:tabular-nums}.kpi span{color:var(--muted);font-size:.85rem}
+.kpi.cur b{color:var(--s-cur)}.kpi.inc b{color:var(--s-inc)}
+.fig{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;overflow-x:auto;position:relative}
+.fig svg{display:block;width:100%;height:auto;min-width:640px;color:var(--muted)}
+svg .grid{stroke:var(--line)}svg .tl{fill:var(--muted);font:11px var(--f-mono)}
+svg .ln{fill:none;stroke-width:2}svg .ln.cur{stroke:var(--s-cur)}svg .ln.inc{stroke:var(--s-inc)}
+svg .p{stroke:var(--surface);stroke-width:2}svg .p.cur{fill:var(--s-cur)}svg .p.inc{fill:var(--s-inc)}
+svg .dl{fill:var(--ink);font:600 12px var(--f-body)}svg .xh{stroke:var(--muted);stroke-dasharray:3 3}
+svg .bar{fill:var(--accent)}svg .bn{fill:var(--ink);font:600 13px var(--f-body)}svg .bd{fill:var(--muted);font:11px var(--f-body)}svg .bv{fill:var(--ink);font:600 13px var(--f-mono)}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:.85rem;color:var(--muted)}.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:6px}
+#tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:12px var(--f-mono);box-shadow:0 4px 16px rgb(0 0 0 / .12);white-space:nowrap}
+figcaption{font-size:.85rem;color:var(--muted);max-width:80ch}figure{margin:0;display:grid;gap:10px}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.88rem}th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:600 .7rem var(--f-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:var(--paper);white-space:nowrap}
+tr:last-child td{border-bottom:0}td.n{font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.note{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:0 10px 10px 0;padding:16px 20px;display:grid;gap:8px}
+code{font-family:var(--f-mono);font-size:.86em;background:var(--accent-soft);padding:1px 5px;border-radius:4px}
+</style>
+<div class="wrap">
+<header style="display:grid;gap:12px"><div class="eyebrow">GameAnalytics · расчёт на реальных данных · 15.10.2026</div>
+<h1>Экономика анализа отзывов</h1>
+<p class="muted">Сколько токенов в день съест анализ при нашем жизненном цикле игр. Расчёт — почасовой прогон 30 дней по настоящим датам отзывов из нашей базы с теми же правилами уровней и повторного анализа, что в воркере. Модель — gemini-3.5-flash-lite.</p></header>
+
+<section><div class="kpis">
+<div class="kpi cur"><b>0,72 млн</b><span>входных токенов в день при текущей логике, пики до 1,32 млн</span></div>
+<div class="kpi inc"><b>65 тыс.</b><span>в день, если перечитывать только новые отзывы: в 11 раз меньше</span></div>
+<div class="kpi"><b>30 / 17 тыс.</b><span>выходных токенов в день: сейчас / инкрементально</span></div>
+<div class="kpi"><b>$8,76 → $1,83</b><span>в месяц на gemini-3.5-flash-lite, без Batch</span></div>
+</div></section>
+
+<section><h2>Расход по дням</h2>
+<figure><div class="legend"><span><i style="background:var(--s-cur)"></i>как сейчас</span><span><i style="background:var(--s-inc)"></i>инкрементально</span></div>
+<div class="fig"><svg viewBox="0 0 900 330" role="img" aria-label="Входные токены в день с 1 по 14 октября: при текущей логике от 0,41 до 1,32 млн, при инкрементальной от 30 до 103 тысяч" id="daily">
+<line class="grid" x1="74" x2="780" y1="286.0" y2="286.0"/><text class="tl" x="64" y="290.0" text-anchor="end">0</text><line class="grid" x1="74" x2="780" y1="241.7" y2="241.7"/><text class="tl" x="64" y="245.7" text-anchor="end">0,25 млн</text><line class="grid" x1="74" x2="780" y1="197.3" y2="197.3"/><text class="tl" x="64" y="201.3" text-anchor="end">0,5 млн</text><line class="grid" x1="74" x2="780" y1="153.0" y2="153.0"/><text class="tl" x="64" y="157.0" text-anchor="end">0,75 млн</text><line class="grid" x1="74" x2="780" y1="108.7" y2="108.7"/><text class="tl" x="64" y="112.7" text-anchor="end">1 млн</text><line class="grid" x1="74" x2="780" y1="64.3" y2="64.3"/><text class="tl" x="64" y="68.3" text-anchor="end">1,25 млн</text><line class="grid" x1="74" x2="780" y1="20.0" y2="20.0"/><text class="tl" x="64" y="24.0" text-anchor="end">1,5 млн</text><text class="tl" x="74.0" y="304" text-anchor="middle">1.10</text><text class="tl" x="182.6" y="304" text-anchor="middle">3.10</text><text class="tl" x="291.2" y="304" text-anchor="middle">5.10</text><text class="tl" x="399.8" y="304" text-anchor="middle">7.10</text><text class="tl" x="508.5" y="304" text-anchor="middle">9.10</text><text class="tl" x="617.1" y="304" text-anchor="middle">11.10</text><text class="tl" x="725.7" y="304" text-anchor="middle">13.10</text>
+<path class="ln cur" d="M74.0,159.0 L128.3,130.2 L182.6,186.6 L236.9,191.4 L291.2,182.3 L345.5,165.6 L399.8,194.6 L454.2,127.2 L508.5,156.6 L562.8,136.1 L617.1,135.7 L671.4,213.0 L725.7,52.2 L780.0,187.2"/><path class="ln inc" d="M74.0,268.2 L128.3,276.6 L182.6,280.6 L236.9,280.2 L291.2,277.4 L345.5,271.4 L399.8,273.8 L454.2,267.7 L508.5,269.8 L562.8,277.2 L617.1,278.8 L671.4,279.5 L725.7,270.5 L780.0,270.7"/><circle class="p cur" cx="74.0" cy="159.0" r="4"/><circle class="p cur" cx="128.3" cy="130.2" r="4"/><circle class="p cur" cx="182.6" cy="186.6" r="4"/><circle class="p cur" cx="236.9" cy="191.4" r="4"/><circle class="p cur" cx="291.2" cy="182.3" r="4"/><circle class="p cur" cx="345.5" cy="165.6" r="4"/><circle class="p cur" cx="399.8" cy="194.6" r="4"/><circle class="p cur" cx="454.2" cy="127.2" r="4"/><circle class="p cur" cx="508.5" cy="156.6" r="4"/><circle class="p cur" cx="562.8" cy="136.1" r="4"/><circle class="p cur" cx="617.1" cy="135.7" r="4"/><circle class="p cur" cx="671.4" cy="213.0" r="4"/><circle class="p cur" cx="725.7" cy="52.2" r="4"/><circle class="p cur" cx="780.0" cy="187.2" r="4"/><circle class="p inc" cx="74.0" cy="268.2" r="4"/><circle class="p inc" cx="128.3" cy="276.6" r="4"/><circle class="p inc" cx="182.6" cy="280.6" r="4"/><circle class="p inc" cx="236.9" cy="280.2" r="4"/><circle class="p inc" cx="291.2" cy="277.4" r="4"/><circle class="p inc" cx="345.5" cy="271.4" r="4"/><circle class="p inc" cx="399.8" cy="273.8" r="4"/><circle class="p inc" cx="454.2" cy="267.7" r="4"/><circle class="p inc" cx="508.5" cy="269.8" r="4"/><circle class="p inc" cx="562.8" cy="277.2" r="4"/><circle class="p inc" cx="617.1" cy="278.8" r="4"/><circle class="p inc" cx="671.4" cy="279.5" r="4"/><circle class="p inc" cx="725.7" cy="270.5" r="4"/><circle class="p inc" cx="780.0" cy="270.7" r="4"/>
+<text class="dl cur-t" x="790.0" y="191.2">как сейчас</text>
+<text class="dl inc-t" x="790.0" y="274.7">инкрементально</text>
+<line class="xh" id="xh" x1="0" x2="0" y1="20" y2="286" visibility="hidden"/>
+<rect id="hit" x="74" y="20" width="706" height="266" fill="transparent"/>
+</svg><div id="tip" hidden></div></div>
+<figcaption>Входные токены в день за 1–14 октября, когда в цикле уже есть игры всех возрастов до 30 дней. Скачки текущей логики — повторные анализы больших игр: каждый перечитывает все их отзывы заново.</figcaption></figure></section>
+
+<section><h2>Куда уходят токены</h2>
+<p>При текущей логике одна Marvel's Wolverine даёт 67% всего расхода за месяц: 65 повторных анализов, и каждый читает 2 422 отзыва игроков (~330 тыс. токенов). Повтор срабатывает при +25 оценках, а Userscore считает и оценки без текста — у Wolverine их в 2,3 раза больше, чем текстов, — так что повтор срабатывает в среднем дважды в сутки, даже когда новых текстов почти нет.</p>
+<div class="tbl"><table><thead><tr><th>Игра</th><th>Анализов, сейчас</th><th>Токенов, сейчас</th><th>Анализов, инкрем.</th><th>Токенов, инкрем.</th></tr></thead><tbody><tr><td>marvels-wolverine</td><td class='n'>65</td><td class='n'>15,98 млн</td><td class='n'>47</td><td class='n'>457 тыс.</td></tr><tr><td>gears-of-war-e-day</td><td class='n'>32</td><td class='n'>2,18 млн</td><td class='n'>26</td><td class='n'>182 тыс.</td></tr><tr><td>control-resonant</td><td class='n'>39</td><td class='n'>1,62 млн</td><td class='n'>19</td><td class='n'>117 тыс.</td></tr><tr><td>fire-emblem-fortunes-weave</td><td class='n'>34</td><td class='n'>0,90 млн</td><td class='n'>16</td><td class='n'>85 тыс.</td></tr><tr><td>silent-hill-townfall</td><td class='n'>29</td><td class='n'>0,88 млн</td><td class='n'>14</td><td class='n'>88 тыс.</td></tr><tr><td>ea-sports-fc-27</td><td class='n'>17</td><td class='n'>0,23 млн</td><td class='n'>12</td><td class='n'>57 тыс.</td></tr></tbody></table></div>
+<p class="muted">За весь прогон с 15 сентября по 14 октября. Инкрементальный режим всё равно делает много анализов, но каждый читает только пришедшие отзывы и прошлое саммари.</p></section>
+
+<section><h2>Четыре стратегии</h2>
+<figure><div class="fig"><svg viewBox="0 0 900 260" role="img" aria-label="Средний расход входных токенов в день по стратегиям"><text class="bn" x="238" y="30" text-anchor="end">Как сейчас</text><text class="bd" x="238" y="47" text-anchor="end">триггер по всем оценкам, полный перечёт</text><rect class="bar" x="250" y="18" width="413.7" height="28" rx="4"><title>Как сейчас: 719 551 входных токенов в день</title></rect><text class="bv" x="673.7" y="32">720 тыс.</text><text class="bd" x="673.7" y="48">≈ $8,76 в месяц</text><text class="bn" x="238" y="90" text-anchor="end">Триггер по текстам</text><text class="bd" x="238" y="107" text-anchor="end">перечёт только изменившихся саммари</text><rect class="bar" x="250" y="78" width="236.5" height="28" rx="4"><title>Триггер по текстам: 411 252 входных токенов в день</title></rect><text class="bv" x="496.5" y="92">411 тыс.</text><text class="bd" x="496.5" y="108">≈ $5,19 в месяц</text><text class="bn" x="238" y="150" text-anchor="end">Инкрементально</text><text class="bd" x="238" y="167" text-anchor="end">новые отзывы + прошлое саммари</text><rect class="bar" x="250" y="138" width="37.4" height="28" rx="4"><title>Инкрементально: 65 097 входных токенов в день</title></rect><text class="bv" x="297.4" y="152">65 тыс.</text><text class="bd" x="297.4" y="168">≈ $1,83 в месяц</text><text class="bn" x="238" y="210" text-anchor="end">Инкрементально, раз в сутки</text><text class="bd" x="238" y="227" text-anchor="end">не чаще одного повтора в день</text><rect class="bar" x="250" y="198" width="31.0" height="28" rx="4"><title>Инкрементально, раз в сутки: 53 942 входных токенов в день</title></rect><text class="bv" x="291.0" y="212">54 тыс.</text><text class="bd" x="291.0" y="228">≈ $1,44 в месяц</text></svg></div><figcaption>Средний расход входных токенов в день на устоявшемся цикле (1–14 октября) и цена в месяц на gemini-3.5-flash-lite.</figcaption></figure>
+<div class="tbl"><table><thead><tr><th>Стратегия</th><th>Вход / день</th><th>Выход / день</th><th>Пик входа</th><th>Анализов / день</th><th>Вызовов / день</th><th>3.5 Lite / мес</th><th>3.5 Lite batch</th><th>3.1 Lite / мес</th><th>3.8 Flash / мес</th><th>3.8 Flash 2027</th></tr></thead><tbody><tr><td>Как сейчас</td><td class='n'>719 551</td><td class='n'>30 426</td><td class='n'>1 318 579</td><td class='n'>21,9</td><td class='n'>64,8</td><td class='n'>$8,76</td><td class='n'>$4,38</td><td class='n'>$6,78</td><td class='n'>$19,62</td><td class='n'>$39,24</td></tr><tr><td>Триггер по текстам</td><td class='n'>411 252</td><td class='n'>19 926</td><td class='n'>1 067 206</td><td class='n'>16,2</td><td class='n'>43,2</td><td class='n'>$5,19</td><td class='n'>$2,61</td><td class='n'>$3,99</td><td class='n'>$11,49</td><td class='n'>$22,98</td></tr><tr><td>Инкрементально</td><td class='n'>65 097</td><td class='n'>16 632</td><td class='n'>142 151</td><td class='n'>16,2</td><td class='n'>37,3</td><td class='n'>$1,83</td><td class='n'>$0,93</td><td class='n'>$1,23</td><td class='n'>$3,33</td><td class='n'>$6,66</td></tr><tr><td>Инкрементально, раз в сутки</td><td class='n'>53 942</td><td class='n'>12 598</td><td class='n'>137 501</td><td class='n'>11,9</td><td class='n'>28,1</td><td class='n'>$1,44</td><td class='n'>$0,72</td><td class='n'>$0,96</td><td class='n'>$2,64</td><td class='n'>$5,25</td></tr></tbody></table></div>
+<ul>
+<li><b>Триггер по текстам.</b> Повторный анализ запускается от прироста отзывов с текстом, которые мы реально подаём в модель, а не от всех оценок Metacritic. Пересчитываются только саммари, где появились новые отзывы. Это минус 43% токенов без потери качества.</li>
+<li><b>Инкрементально.</b> При повторе модель получает прошлое саммари и только новые отзывы. Ещё минус 84%. Риск — дрейф саммари; лечится полным перечётом раз в неделю для игр в hot и warm.</li>
+<li><b>Раз в сутки.</b> Не чаще одного повтора на игру в день. Ещё минус 17% и меньше вызовов — удобно для Batch API, который вдвое дешевле.</li>
+</ul></section>
+
+<section><h2>Лимиты бесплатного ключа</h2>
+<div class="note">
+<p>На сравнении моделей бесплатный ключ отдал модели Flash около 149 тыс. входных токенов, потом ответил 429 с дневной квотой. Flash-Lite обслужили по ~750 тыс. токенов каждая без отказов. Текущая логика (0,72 млн в день, пики 1,32 млн) в бесплатную квоту Flash не влезает, а на Flash-Lite на грани. Инкрементальная (65 тыс. в день, пик 142 тыс.) помещается даже в квоту Flash. Но для работы всё равно нужен платный тариф: на бесплатном Google использует запросы для обучения.</p></div></section>
+
+<section><h2>Deep analyze — отдельная статья</h2>
+<p>Час видео в Gemini — около 360 тыс. входных токенов (~100 токенов на секунду при низком разрешении). Один Deep analyze часового летсплея — это примерно 5.5 дня всего инкрементального анализа отзывов. Стоимость одного запуска: около $0,11 на 3.5 Flash-Lite, $0,27 на 3.8 Flash и $0,54 на 3.8 Flash с 2027 года.</p>
+<ul><li>5 запусков в день на 3.8 Flash — 1,8 млн токенов и около $40 в месяц: больше, чем весь анализ отзывов даже при текущей логике.</li>
+<li>Поэтому результат Deep analyze стоит кешировать на игру и перезапускать только по кнопке, а видео ограничивать 20–30 минутами.</li></ul></section>
+
+<section><h2>Допущения</h2><ul class="muted">
+<li>Прогон: 80 игр с отзывами (New Releases за 30 дней и каталог за 13–15 октября), 15 сентября — 14 октября, шаг 1 час. Отзывы дня распределены по часам равномерно. Опрос по уровням hot/warm/cool, правила повтора — из <code>app/pipeline/tiers.py</code>: минимум 3 рецензии или 10 оценок, повтор при +20% или +25, не чаще раза в 6 часов.</li>
+<li>Токены: 3,95 символа на входной токен, около 500 выходных токенов на саммари критиков, 580 на саммари игроков, 345 на суть игры — по замерам сравнения моделей. Свыше 200 тыс. символов — map-reduce.</li>
+<li>В базе нет игр старше 30 дней. По наклону 15–30-дневных игр они добавят до 1,34 млн в день к текущей логике и до 84 тыс. к инкрементальной — это верхняя оценка.</li>
+<li>Всплески (возврат в hot) не моделировались. Цены — официальный прайс Google на 15.10.2026. Скрипт расчёта: <code>backend/eval/economics.py</code>.</li></ul></section>
+</div>
+<script>
+(() => {
+  const D = {"days": ["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04", "2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09", "2026-10-10", "2026-10-11", "2026-10-12", "2026-10-13", "2026-10-14"], "cur": [716135, 878633, 560686, 533691, 585025, 679009, 515390, 895702, 729711, 845170, 847593, 411389, 1318579, 556998], "inc": [100244, 53114, 30639, 32514, 48425, 82528, 69074, 103037, 91446, 49422, 40675, 36614, 87245, 86379]};
+  const svg = document.getElementById("daily"), hit = document.getElementById("hit"), xh = document.getElementById("xh"), tip = document.getElementById("tip");
+  if (!svg) return;
+  const L = 74, R = 780, n = D.days.length;
+  const f = v => v.toLocaleString("ru-RU");
+  hit.addEventListener("mousemove", e => {
+    const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+    const i = Math.max(0, Math.min(n - 1, Math.round((p.x - L) / (R - L) * (n - 1))));
+    const x = L + i * (R - L) / (n - 1);
+    xh.setAttribute("x1", x); xh.setAttribute("x2", x); xh.setAttribute("visibility", "visible");
+    tip.hidden = false;
+    tip.innerHTML = D.days[i].split("-").reverse().slice(0, 2).join(".") + "<br>как сейчас: " + f(D.cur[i]) + "<br>инкрементально: " + f(D.inc[i]);
+    const box = svg.parentElement.getBoundingClientRect();
+    tip.style.left = Math.min(e.clientX - box.left + 14, box.width - 190) + "px";
+    tip.style.top = (e.clientY - box.top - 10) + "px";
+  });
+  hit.addEventListener("mouseleave", () => { tip.hidden = true; xh.setAttribute("visibility", "hidden"); });
+})();
+</script>

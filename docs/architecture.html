@@ -1,0 +1,908 @@
+<title>Архитектура GameAnalytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: технический дизайн-док. Узкое оглавление слева + основная колонка; схемы шире текста и скроллятся сами. */
+:root{
+  --paper:#F3F5F9; --surface:#FFFFFF; --ink:#131823; --muted:#586379; --line:#D7DDE8;
+  --accent:#2C47C0; --accent-soft:#E5E9FA;
+  --good:#1D8A4C; --mixed:#B88A00; --bad:#C3362C;
+  --f-display:"Unbounded","Golos Text",system-ui,sans-serif;
+  --f-body:"Golos Text",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --s-1:.8125rem; --s0:1rem; --s1:1.1875rem; --s2:1.5rem; --s3:2.25rem;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --paper:#0E121A; --surface:#161C27; --ink:#E5E9F1; --muted:#97A1B4; --line:#283143;
+    --accent:#8A9DFF; --accent-soft:#1D2648;
+    --good:#43C47B; --mixed:#E3BC40; --bad:#F06A5E;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --paper:#0E121A; --surface:#161C27; --ink:#E5E9F1; --muted:#97A1B4; --line:#283143;
+  --accent:#8A9DFF; --accent-soft:#1D2648;
+  --good:#43C47B; --mixed:#E3BC40; --bad:#F06A5E;
+}
+
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:var(--s0);line-height:1.6;padding-inline:20px}
+.wrap{max-width:1180px;margin:0 auto;padding-block:48px 96px;display:grid;grid-template-columns:200px minmax(0,1fr);gap:56px}
+@media (max-width:900px){.wrap{grid-template-columns:minmax(0,1fr);gap:24px;padding-block:28px 64px}}
+
+nav.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 24px);align-self:start;font-size:var(--s-1)}
+nav.toc .brand{font-family:var(--f-display);font-weight:700;font-size:.95rem;letter-spacing:.01em;margin-bottom:18px;display:flex;align-items:center;gap:10px}
+nav.toc ol{list-style:none;margin:0;padding:0;display:grid;gap:6px;counter-reset:t}
+nav.toc a{color:var(--muted);text-decoration:none;display:block;padding:3px 0 3px 12px;border-left:2px solid var(--line)}
+nav.toc a:hover,nav.toc a:focus-visible{color:var(--ink);border-left-color:var(--accent);outline:none}
+@media (max-width:900px){nav.toc{position:static}nav.toc ol{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}}
+
+main{min-width:0;display:grid;gap:64px}
+section{display:grid;gap:18px;min-width:0}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.2}
+h1{font-size:var(--s3);font-weight:700;letter-spacing:-.01em}
+h2{font-size:var(--s2);font-weight:700}
+h3{font-size:var(--s1);font-weight:500}
+p{margin:0;max-width:68ch}
+.lede{font-size:var(--s1);color:var(--muted);max-width:62ch}
+.eyebrow{font-family:var(--f-mono);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.meta{display:flex;flex-wrap:wrap;gap:8px 20px;font-family:var(--f-mono);font-size:var(--s-1);color:var(--muted)}
+code,.mono{font-family:var(--f-mono);font-size:.86em}
+code{background:var(--accent-soft);padding:1px 5px;border-radius:4px;word-break:break-word}
+a{color:var(--accent)}
+ul.plain{margin:0;padding-left:1.1em;display:grid;gap:6px;max-width:72ch}
+
+.score{display:inline-grid;place-items:center;min-width:2.1em;height:2.1em;padding:0 .35em;border-radius:6px;font-family:var(--f-mono);font-weight:600;font-size:.8rem;color:#fff}
+.score.g{background:var(--good)}.score.y{background:var(--mixed);color:#1a1400}.score.r{background:var(--bad)}
+
+.findings{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.finding{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;display:grid;gap:6px;align-content:start}
+.finding b{font-family:var(--f-mono);font-size:1.35rem;font-weight:600;font-variant-numeric:tabular-nums}
+.finding span{color:var(--muted);font-size:var(--s-1);line-height:1.5}
+
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{text-align:left;vertical-align:top;padding:10px 14px;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+th{font-family:var(--f-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;background:var(--paper)}
+td.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td.ep{font-family:var(--f-mono);font-size:.8rem;min-width:260px}
+
+figure{margin:0;display:grid;gap:10px;min-width:0}
+.fig{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
+.fig svg{display:block;width:100%;height:auto;color:var(--muted)}
+.fig.wide svg{min-width:880px}
+figcaption{font-size:var(--s-1);color:var(--muted);max-width:80ch}
+
+svg .box{fill:var(--surface);stroke:var(--ink);stroke-width:1.2}
+svg .box.ext{fill:var(--paper);stroke:var(--muted);stroke-dasharray:5 4}
+svg .box.core{fill:var(--accent-soft);stroke:var(--accent)}
+svg .bus{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.2}
+svg .t{fill:var(--ink);font-family:var(--f-body);font-size:14px;font-weight:600}
+svg .ts{fill:var(--muted);font-family:var(--f-mono);font-size:11px}
+svg .tl{fill:var(--muted);font-family:var(--f-mono);font-size:11px}
+svg .ta{fill:var(--accent);font-family:var(--f-mono);font-size:11px;font-weight:600}
+svg .edge{fill:none;stroke:currentColor;stroke-width:1.4}
+svg .edge.acc{stroke:var(--accent)}
+svg .edge.dash{stroke-dasharray:4 4}
+svg .emit{fill:var(--accent)}
+svg .grid{stroke:var(--line);stroke-width:1}
+svg .bar{fill:var(--accent)}
+svg .bar.soft{fill:var(--accent-soft);stroke:var(--accent);stroke-dasharray:4 3}
+svg .bar.mute{fill:var(--muted)}
+svg .st{fill:var(--surface);stroke:var(--ink);stroke-width:1.2}
+svg .st.on{fill:var(--accent);stroke:var(--accent)}
+svg .ton{fill:var(--paper);font-family:var(--f-mono);font-size:11px;font-weight:600}
+
+.entities{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+.entity{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.entity h4{margin:0;padding:9px 14px;font-family:var(--f-mono);font-size:.82rem;background:var(--accent-soft);color:var(--accent);border-bottom:1px solid var(--line)}
+.entity ul{list-style:none;margin:0;padding:10px 14px;display:grid;gap:3px;font-family:var(--f-mono);font-size:.76rem;color:var(--muted)}
+.entity li b{color:var(--ink);font-weight:600}
+
+.screens{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.screen{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;display:grid;gap:8px;align-content:start}
+.screen h3{font-size:1rem}
+.screen ul{margin:0;padding-left:1.1em;display:grid;gap:4px;font-size:.92rem}
+
+.devpanel{background:#0B0F16;color:#C9D2E3;border-radius:12px;border:1px solid var(--line);overflow:hidden;font-family:var(--f-mono);font-size:.76rem}
+.dp-head{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;padding:10px 14px;border-bottom:1px solid #222B3B;color:#8D99AE}
+.dp-head .live{color:#5BE08F}
+.dp-body{display:grid;grid-template-columns:230px minmax(0,1fr)}
+@media (max-width:700px){.dp-body{grid-template-columns:minmax(0,1fr)}}
+.dp-nodes{padding:12px 14px;border-right:1px solid #222B3B;display:grid;gap:8px;align-content:start}
+.node{border:1px solid #2A3447;border-radius:6px;padding:7px 10px;display:flex;justify-content:space-between;gap:8px}
+.node.run{border-color:#6F86FF;box-shadow:inset 3px 0 0 #6F86FF}
+.node.warn{box-shadow:inset 3px 0 0 #E3BC40}
+.node em{font-style:normal;color:#8D99AE;font-variant-numeric:tabular-nums}
+.dp-log{padding:10px 14px;overflow-x:auto;white-space:pre;line-height:1.75}
+.dp-log .ok{color:#5BE08F}.dp-log .slow{color:#E3BC40}.dp-log .ai{color:#9FB0FF}.dp-log .dim{color:#66728A}
+
+pre.code{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-x:auto;font-family:var(--f-mono);font-size:.8rem;line-height:1.6;color:var(--ink)}
+.note{border-left:3px solid var(--mixed);background:var(--surface);padding:12px 16px;border-radius:0 8px 8px 0;max-width:80ch}
+.note.risk{border-left-color:var(--bad)}
+.qs{display:grid;gap:10px;counter-reset:q;max-width:80ch}
+.qs li{list-style:none;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 16px}
+.qs li b{display:block;margin-bottom:2px}
+.qs{padding:0;margin:0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+  <nav class="toc" aria-label="Оглавление">
+    <div class="brand"><span class="score g">96</span>GameAnalytics</div>
+    <ol>
+      <li><a href="#recon">Разведка источника</a></li>
+      <li><a href="#timing">Тайминги: 20 карточек</a></li>
+      <li><a href="#cycle">Первый запуск и цикл</a></li>
+      <li><a href="#arch">Архитектура</a></li>
+      <li><a href="#fields">Откуда берём поля</a></li>
+      <li><a href="#lifecycle">Обновление и архив</a></li>
+      <li><a href="#ai">AI-слой</a></li>
+      <li><a href="#similar">Похожие игры</a></li>
+      <li><a href="#deep">Deep analyze</a></li>
+      <li><a href="#quota">Квоты ключа</a></li>
+      <li><a href="#data">Модель данных</a></li>
+      <li><a href="#ui">Веб-интерфейс</a></li>
+      <li><a href="#devpanel">DevPanel</a></li>
+      <li><a href="#stack">Стек и каркас</a></li>
+      <li><a href="#risks">Риски</a></li>
+      <li><a href="#decide">Решения</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header style="display:grid;gap:14px">
+      <div class="eyebrow">Дизайн-док · v0.6 · 15 октября 2026</div>
+      <h1>Архитектура GameAnalytics</h1>
+      <p class="lede">Платформа собирает выходящие игры с Metacritic каждый час, хранит карточки и все отзывы, прогоняет их через LLM и показывает результат в веб-интерфейсе. Отдельная DevPanel показывает работу пайплайна в реальном времени.</p>
+      <div class="meta"><span>Источник: metacritic.com</span><span>Цикл: 1 час</span><span>Без бэклога, окно New Releases</span><span>LLM: gemini-3.5-flash-lite, бесплатный ключ</span><span>Замеры: 14–15.10.2026</span></div>
+    </header>
+
+    <!-- RECON -->
+    <section id="recon">
+      <div class="eyebrow">Разведка</div>
+      <h2>HTML парсить не нужно: у Metacritic есть JSON-бэкенд</h2>
+      <p>Страницы Metacritic собраны на Nuxt и подгружают данные из <code>backend.metacritic.com</code>. Те же эндпоинты отвечают на обычный GET без авторизации и без ключа. Это в разы дешевле парсинга HTML: страница игры весит 734 КБ HTML против 226 КБ JSON, и структура не ломается от смены вёрстки.</p>
+      <div class="findings">
+        <div class="finding"><b>181 118</b><span>игр в каталоге с сортировкой New. Из них 18 620 с Metascore (то, что сайт показывает как New Releases).</span></div>
+        <div class="finding"><b>60–120 / день</b><span>новых карточек в каталоге. С Metascore выходит 2–7 игр в день.</span></div>
+        <div class="finding"><b>0.1 с vs 4.5 с</b><span>ответ из кеша Cloudflare против холодного запроса к origin. Хвост задержек дают именно холодные запросы.</span></div>
+        <div class="finding"><b>0 × 429</b><span>ни одного отказа или rate limit на 8 параллельных потоках и ~6 запросах в секунду.</span></div>
+      </div>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Данные</th><th>Эндпоинт</th><th>Что выяснили</th></tr></thead>
+          <tbody>
+            <tr><td>Каталог New</td><td class="ep">GET /finder/metacritic/web?sortBy=-releaseDate&amp;productType=games&amp;offset=&amp;limit=</td><td><code>limit</code> не больше 50, при 100 ответ 400. Пагинация через <code>offset</code>.</td></tr>
+            <tr><td>New Releases</td><td class="ep">тот же finder + metaScoreMin=1</td><td>Так сам сайт строит карусель «Newly Released» на /game/.</td></tr>
+            <tr><td>Карточка игры</td><td class="ep">GET /composer/metacritic/pages/games/{slug}/web</td><td>~226 КБ. Компоненты: product, critic/user score summary, первые отзывы, похожие игры, game-stats.</td></tr>
+            <tr><td>Отзывы критиков</td><td class="ep">GET /reviews/metacritic/critic/games/{slug}/platform/{platform}/web?offset=</td><td><code>limit</code> игнорируется: всегда 10 на страницу. Без <code>/platform/</code> API отдаёт только ведущую платформу: у Elden Ring это 93 рецензии на PS5, а ещё 63 на PC и 19 на Xbox Series X.</td></tr>
+            <tr><td>Отзывы игроков</td><td class="ep">GET /reviews/metacritic/user/games/{slug}/platform/{platform}/web?offset=&amp;limit=500&amp;sort=date</td><td>Отдаёт до 500 за запрос, тоже по платформам. Userscore считает все оценки, а с текстом их меньше: у Silent Hill: Townfall 705 оценок и 208 текстовых отзывов. Собираем все текстовые.</td></tr>
+            <tr><td>Обложка</td><td class="ep">https://www.metacritic.com/a/img/catalog{bucketPath}</td><td>Отдаёт JPEG. <code>bucketPath</code> лежит в <code>images[]</code> карточки.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>По robots.txt запрещены <code>/search</code>, <code>/user</code>, <code>/login</code>. Разделы <code>/game</code> и <code>/browse</code> открыты. Риски по условиям использования разобраны в <a href="#risks">конце документа</a>.</p>
+    </section>
+
+    <!-- TIMING -->
+    <section id="timing">
+      <div class="eyebrow">Тест таймингов</div>
+      <h2>20 карточек целиком: 13–23 секунды</h2>
+      <p>Скрипт <code>research/bench_metacritic.py</code> асинхронно (httpx + asyncio, ограничение параллельности семафором) забирает 20 игр из finder. Для каждой он скачивает карточку, все отзывы критиков и все отзывы игроков. Чтобы не попадать в кеш CDN, каждый прогон брал новую страницу каталога.</p>
+      <figure>
+        <div class="fig">
+          <svg viewBox="0 0 960 200" role="img" aria-label="Полное время загрузки 20 карточек: New Releases при 4 потоках 23,0 секунды, при 8 потоках 13,4 секунды, каталог при 8 потоках 13,4 секунды">
+            <g>
+              <line class="grid" x1="260" y1="20" x2="260" y2="160"/>
+              <line class="grid" x1="388" y1="20" x2="388" y2="160"/>
+              <line class="grid" x1="516" y1="20" x2="516" y2="160"/>
+              <line class="grid" x1="644" y1="20" x2="644" y2="160"/>
+              <line class="grid" x1="772" y1="20" x2="772" y2="160"/>
+              <line class="grid" x1="900" y1="20" x2="900" y2="160"/>
+              <text class="tl" x="260" y="180" text-anchor="middle">0 с</text>
+              <text class="tl" x="388" y="180" text-anchor="middle">5</text>
+              <text class="tl" x="516" y="180" text-anchor="middle">10</text>
+              <text class="tl" x="644" y="180" text-anchor="middle">15</text>
+              <text class="tl" x="772" y="180" text-anchor="middle">20</text>
+              <text class="tl" x="900" y="180" text-anchor="middle">25</text>
+            </g>
+            <text class="t" x="248" y="44" text-anchor="end">New Releases · 4 потока</text>
+            <text class="ts" x="248" y="60" text-anchor="end">91 запрос · 984 отзыва</text>
+            <rect class="bar" x="260" y="30" width="589" height="28" rx="3"/>
+            <text class="ta" x="858" y="49">23,0 с</text>
+
+            <text class="t" x="248" y="92" text-anchor="end">New Releases · 8 потоков</text>
+            <text class="ts" x="248" y="108" text-anchor="end">76 запросов · 618 отзывов</text>
+            <rect class="bar" x="260" y="78" width="343" height="28" rx="3"/>
+            <text class="ta" x="612" y="97">13,4 с</text>
+
+            <text class="t" x="248" y="140" text-anchor="end">Каталог New · 8 потоков</text>
+            <text class="ts" x="248" y="156" text-anchor="end">62 запроса · 25 отзывов</text>
+            <rect class="bar mute" x="260" y="126" width="343" height="28" rx="3"/>
+            <text class="ta" x="612" y="145">13,4 с</text>
+          </svg>
+        </div>
+        <figcaption>Полное время (finder + 20 карточек со всеми отзывами). У свежих игр каталога отзывов почти нет, поэтому время там определяют холодные ответы origin по 4–12 секунд, а не объём.</figcaption>
+      </figure>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Прогон</th><th>Запросов</th><th>Объём</th><th>Критики</th><th>Игроки</th><th>p50 карточки</th><th>Самая долгая игра</th></tr></thead>
+          <tbody>
+            <tr><td>New Releases · 4 потока</td><td class="num">91</td><td class="num">5,2 МБ</td><td class="num">428</td><td class="num">556</td><td class="num">0,75 с</td><td class="num">control-resonant · 18,3 с</td></tr>
+            <tr><td>New Releases · 8 потоков</td><td class="num">76</td><td class="num">4,7 МБ</td><td class="num">268</td><td class="num">350</td><td class="num">0,84 с</td><td class="num">fire-emblem-fortunes-weave · 12,9 с</td></tr>
+            <tr><td>Каталог New · 8 потоков</td><td class="num">62</td><td class="num">3,4 МБ</td><td class="num">25</td><td class="num">0</td><td class="num">0,95 с</td><td class="num">signal-lost · 12,4 с</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note"><b>Реальный первый запуск, 15.10.2026.</b> Замер выше брал отзывы только ведущей платформы. Каркас собирает их по всем платформам: 63 игры New Releases за 30 дней дали 546 запросов, 21 МБ и 6 965 отзывов за 3 мин 16 с при лимите 3 запроса в секунду, без ошибок. Медиана одной игры — 10,8 с, самая долгая — 27,8 с. Следующий часовой цикл взял 50 новых карточек каталога за 19 с.</div>
+      <h3>Выводы для планирования</h3>
+      <ul class="plain">
+        <li>На одну карточку уходит в среднем 3–4,5 запроса и около 200 КБ. Медиана ответа меньше секунды, холодный ответ 4,5–7,7 секунды.</li>
+        <li>Узкое место в пагинации критиков по 10 штук: страницы идут последовательно. В рабочем коде после первой страницы известен <code>totalResults</code>, и остальные страницы можно запрашивать параллельно.</li>
+        <li>Повторный опрос дешёвый. Отзывы сортируются по дате, поэтому достаточно читать страницы, пока не встретится уже сохранённый id. Обычно это 1 запрос на тип отзывов.</li>
+        <li>Скрапинг укладывается в несколько минут в час. Основное время и деньги цикла уйдут на LLM-анализ.</li>
+      </ul>
+    </section>
+
+    <!-- CYCLE -->
+    <section id="cycle">
+      <div class="eyebrow">Бюджет часа</div>
+      <h2>Первый запуск и часовой цикл</h2>
+      <p>Полный бэклог не грузим. Первый запуск берёт окно New Releases по дате релиза. Дальше каждый час полностью перечитываем каталог и New Releases за последние три дня по дате релиза, а уже собранные игры обновляем по расписанию, которое зависит от их возраста. Это расписание описано в разделе <a href="#lifecycle">обновления и архива</a>.</p>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Окно New Releases</th><th>Игр</th><th>Из них с 10+ рецензиями</th><th>Первый запуск при 3 rps</th></tr></thead>
+          <tbody>
+            <tr><td>7 дней</td><td class="num">15</td><td class="num">10</td><td class="num">≈30 с</td></tr>
+            <tr><td>30 дней</td><td class="num">64</td><td class="num">32</td><td class="num">≈2 мин</td></tr>
+            <tr><td>90 дней</td><td class="num">204</td><td class="num">99</td><td class="num">≈7 мин</td></tr>
+            <tr><td>Весь раздел (для сравнения)</td><td class="num">18 620</td><td class="num">—</td><td class="num">≈1,5–2 суток</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Число игр посчитано 14.10.2026. Время рассчитано из ≈6 запросов на игру с отзывами.</p>
+      <figure>
+        <div class="fig wide">
+          <svg viewBox="0 0 1000 290" role="img" aria-label="Часовой цикл: discovery и новые карточки занимают первую минуту, обновление по расписанию ещё 2–3 минуты, затем AI-анализ идёт асинхронно до 45-й минуты и пересчёт похожих игр">
+            <g>
+              <line class="grid" x1="210" y1="16" x2="210" y2="250"/><text class="tl" x="210" y="270" text-anchor="middle">:00</text>
+              <line class="grid" x1="335" y1="16" x2="335" y2="250"/><text class="tl" x="335" y="270" text-anchor="middle">:10</text>
+              <line class="grid" x1="460" y1="16" x2="460" y2="250"/><text class="tl" x="460" y="270" text-anchor="middle">:20</text>
+              <line class="grid" x1="585" y1="16" x2="585" y2="250"/><text class="tl" x="585" y="270" text-anchor="middle">:30</text>
+              <line class="grid" x1="710" y1="16" x2="710" y2="250"/><text class="tl" x="710" y="270" text-anchor="middle">:40</text>
+              <line class="grid" x1="835" y1="16" x2="835" y2="250"/><text class="tl" x="835" y="270" text-anchor="middle">:50</text>
+              <line class="grid" x1="960" y1="16" x2="960" y2="250"/><text class="tl" x="960" y="270" text-anchor="middle">:60</text>
+            </g>
+            <text class="t" x="198" y="40" text-anchor="end">Discovery</text>
+            <rect class="bar" x="210" y="26" width="6" height="20" rx="2"/>
+            <text class="ts" x="226" y="40">окно 3 дня: каталог + New Releases · ≈12 запросов · ≈15 с</text>
+
+            <text class="t" x="198" y="76" text-anchor="end">Новые карточки</text>
+            <rect class="bar" x="213" y="62" width="10" height="20" rx="2"/>
+            <text class="ts" x="233" y="76">3–5 в час, при всплеске до 50 · 20 с – 3 мин</text>
+
+            <text class="t" x="198" y="112" text-anchor="end">Обновление hot</text>
+            <rect class="bar" x="223" y="98" width="13" height="20" rx="2"/>
+            <text class="ts" x="246" y="112">≈100 игр × 1 запрос + дельты отзывов · ≈1 мин</text>
+
+            <text class="t" x="198" y="148" text-anchor="end">warm, cool, dormant</text>
+            <rect class="bar" x="236" y="134" width="13" height="20" rx="2"/>
+            <text class="ts" x="259" y="148">кому подошёл срок по расписанию · ≈150 запросов · ≈1 мин</text>
+
+            <text class="t" x="198" y="184" text-anchor="end">AI-анализ</text>
+            <rect class="bar soft" x="249" y="170" width="511" height="20" rx="2"/>
+            <text class="ta" x="261" y="184">только игры с заметным приростом отзывов; Batch, асинхронно</text>
+
+            <text class="t" x="198" y="220" text-anchor="end">update_facets</text>
+            <rect class="bar soft" x="249" y="206" width="200" height="20" rx="2"/>
+            <text class="ta" x="459" y="220">суть новых игр → векторы граней → пересчёт «похожих»</text>
+
+            <line class="edge acc" x1="272" y1="16" x2="272" y2="250" stroke-dasharray="3 3"/>
+            <text class="ta" x="278" y="246">окно Metacritic: ≈3–5 мин из 60</text>
+          </svg>
+        </div>
+        <figcaption>Ось — минуты внутри часа. Сплошные полосы ходят в Metacritic и делят общий лимит 3 rps, пунктирные — нет. Даже со всплеском новых карточек сбор занимает меньше десятой части часа. Задачу <code>update_facets</code> ставит в очередь каждый прогон discovery: до 150 облегчённых сутей за раз (≈13 мин при 12 запросах в минуту), остальное ждёт следующего часа.</figcaption>
+      </figure>
+      <h3>Как не пропустить новое и не взять дубль</h3>
+      <ul class="plain">
+        <li><b>Ключ игры</b> — числовой id продукта Metacritic (<code>item.id</code>). Slug тоже уникален, но может поменяться. Повторная встреча игры в каталоге или в New Releases обновляет существующую запись (upsert) и не создаёт новую.</li>
+        <li><b>Окно по датам вместо страниц.</b> Каждый час перечитываем каталог и New Releases за последние три дня целиком, с фильтром <code>releaseDateMin</code>/<code>releaseDateMax</code>, и сверяем число найденных игр с <code>totalResults</code> из API. Первая версия брала одну страницу из 50 игр, а 14 октября вышло 84, и 32 игры не загрузились.</li>
+        <li><b>Порядок среди игр одного дня нестабилен.</b> Соседние страницы пересекаются, и часть игр не попадает ни на одну страницу: за 14-е один проход видит 81 игру из 84. Поэтому окно читаем дважды, в прямом и обратном порядке, а если игр всё ещё меньше, чем в <code>totalResults</code>, делим окно пополам.</li>
+        <li><b>Сегодняшние релизы.</b> Сортировка «сначала новые» показывает только игры, вышедшие до сегодняшнего дня. Обратная сортировка показывает и сегодняшние (131 игра 15 октября), и будущие. Берём окно до сегодняшнего дня включительно, анонсы не грузим.</li>
+        <li><b>Поздно добавленные игры.</b> Игра, добавленная задним числом, не попадает в трёхдневное окно. Раз в сутки, в 04:30, ночной sweep перечитывает каталог за прошлые две недели, но только за даты, которые часовое окно уже видело хотя бы раз (<code>sweep_range</code> в <code>app/pipeline/discovery.py</code>). Начало отсчёта — окно первого успешного часового прогона. Даты до запуска сервиса никто не наблюдал, игры там — бэклог, а не поздние добавления, поэтому чистый старт не тянет две недели каталога. Если таких дат ещё нет, sweep пропускается с событием <code>discovery.window skip</code>.</li>
+        <li><b>Как часто каталог меняется задним числом</b>, меряет <code>research/catalog_watch.py</code>: раз в час он сохраняет число игр по каждой дате релиза за 60 дней, а для дней до 50 игр — и сами id, так что добавления и удаления видны точно. Первый срез 15.10.2026 — 5 264 игры, за первый час изменений нет. По накопленным событиям подстроим глубину sweep.</li>
+        <li><b>Ключ отзыва.</b> У отзывов игроков есть uuid. У критиков id нет, поэтому ключ — хеш из издания, автора, даты и оценки. Пересборка отзывов не создаёт дублей.</li>
+      </ul>
+    </section>
+
+    <!-- ARCH -->
+    <section id="arch">
+      <div class="eyebrow">Система</div>
+      <h2>Архитектура</h2>
+      <p>Сбор, анализ и выдача работают как отдельные процессы с общей очередью задач. Каждый компонент пишет события в общую шину, и DevPanel читает эту шину в реальном времени.</p>
+      <figure>
+        <div class="fig wide">
+          <svg viewBox="0 0 1040 520" role="img" aria-label="Схема: планировщик запускает discovery, discovery кладёт slug-и в очередь, fetch-воркеры забирают JSON с Metacritic и пишут в PostgreSQL; AI-воркеры читают отзывы, вызывают Gemini и пишут саммари, суть игры и векторы граней; deep analyze находит летсплей через YouTube Data API, а Gemini смотрит его по ссылке; FastAPI отдаёт данные веб-интерфейсу и поток событий DevPanel из шины Redis Streams">
+            <defs><marker id="ar-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+
+            <!-- row 1: ingest -->
+            <rect class="box" x="20" y="50" width="160" height="60" rx="8"/>
+            <text class="t" x="100" y="77" text-anchor="middle">Планировщик</text>
+            <text class="ts" x="100" y="96" text-anchor="middle">cron · каждый час</text>
+            <circle class="emit" cx="172" cy="58" r="4"/>
+
+            <rect class="box" x="230" y="50" width="160" height="60" rx="8"/>
+            <text class="t" x="310" y="77" text-anchor="middle">Discovery</text>
+            <text class="ts" x="310" y="96" text-anchor="middle">diff новых slug-ов</text>
+            <circle class="emit" cx="382" cy="58" r="4"/>
+
+            <rect class="box core" x="440" y="50" width="160" height="60" rx="8"/>
+            <text class="t" x="520" y="77" text-anchor="middle">Очередь задач</text>
+            <text class="ts" x="520" y="96" text-anchor="middle">Redis · arq · приоритеты</text>
+            <circle class="emit" cx="592" cy="58" r="4"/>
+
+            <rect class="box" x="650" y="50" width="160" height="60" rx="8"/>
+            <text class="t" x="730" y="77" text-anchor="middle">Fetch-воркеры</text>
+            <text class="ts" x="730" y="96" text-anchor="middle">3 rps · ретраи · backoff</text>
+            <circle class="emit" cx="802" cy="58" r="4"/>
+
+            <rect class="box ext" x="860" y="50" width="160" height="60" rx="8"/>
+            <text class="t" x="940" y="77" text-anchor="middle">Metacritic</text>
+            <text class="ts" x="940" y="96" text-anchor="middle">backend JSON API</text>
+
+            <path class="edge" d="M180,80 H228" marker-end="url(#ar-a)"/>
+            <text class="tl" x="205" y="72" text-anchor="middle">тик</text>
+            <path class="edge" d="M390,80 H438" marker-end="url(#ar-a)"/>
+            <text class="tl" x="415" y="72" text-anchor="middle">slug</text>
+            <path class="edge" d="M600,80 H648" marker-end="url(#ar-a)"/>
+            <text class="tl" x="625" y="72" text-anchor="middle">job</text>
+            <path class="edge" d="M810,72 H858" marker-end="url(#ar-a)"/>
+            <text class="tl" x="835" y="66" text-anchor="middle">GET</text>
+            <path class="edge" d="M860,94 H812" marker-end="url(#ar-a)"/>
+            <text class="tl" x="835" y="108" text-anchor="middle">JSON</text>
+            <path class="edge dash" d="M310,50 V24 H940 V48" marker-end="url(#ar-a)"/>
+            <text class="tl" x="625" y="18" text-anchor="middle">finder ?sortBy=-releaseDate (через тот же лимитер)</text>
+
+            <!-- row 2: analysis + storage -->
+            <rect class="box ext" x="230" y="200" width="160" height="60" rx="8"/>
+            <text class="t" x="310" y="227" text-anchor="middle">LLM API</text>
+            <text class="ts" x="310" y="246" text-anchor="middle">Gemini · embedding-001</text>
+
+            <rect class="box" x="440" y="200" width="160" height="60" rx="8"/>
+            <text class="t" x="520" y="227" text-anchor="middle">AI-воркеры</text>
+            <text class="ts" x="520" y="246" text-anchor="middle">саммари · суть · грани</text>
+            <circle class="emit" cx="592" cy="208" r="4"/>
+
+            <rect class="box core" x="650" y="200" width="160" height="60" rx="8"/>
+            <text class="t" x="730" y="227" text-anchor="middle">PostgreSQL</text>
+            <text class="ts" x="730" y="246" text-anchor="middle">raw JSON · pgvector</text>
+
+            <path class="edge" d="M520,110 V198" marker-end="url(#ar-a)"/>
+            <text class="tl" x="528" y="160">analyze</text>
+            <path class="edge" d="M730,110 V198" marker-end="url(#ar-a)"/>
+            <text class="tl" x="738" y="160">upsert карточки, отзывов</text>
+            <path class="edge" d="M440,220 H392" marker-end="url(#ar-a)"/>
+            <text class="tl" x="416" y="214" text-anchor="middle">отзывы</text>
+            <path class="edge" d="M390,242 H438" marker-end="url(#ar-a)"/>
+            <text class="tl" x="416" y="256" text-anchor="middle">JSON</text>
+            <path class="edge" d="M650,220 H602" marker-end="url(#ar-a)"/>
+            <text class="tl" x="626" y="214" text-anchor="middle">читает</text>
+            <path class="edge" d="M600,242 H648" marker-end="url(#ar-a)"/>
+            <text class="tl" x="626" y="256" text-anchor="middle">пишет</text>
+
+            <!-- row 3: deep + api + clients -->
+            <rect class="box ext" x="230" y="340" width="160" height="60" rx="8"/>
+            <text class="t" x="310" y="367" text-anchor="middle">YouTube</text>
+            <text class="ts" x="310" y="386" text-anchor="middle">Data API v3</text>
+
+            <rect class="box" x="440" y="340" width="160" height="60" rx="8"/>
+            <text class="t" x="520" y="367" text-anchor="middle">Deep analyze</text>
+            <text class="ts" x="520" y="386" text-anchor="middle">3 отрезка по 5 мин</text>
+            <circle class="emit" cx="592" cy="348" r="4"/>
+
+            <rect class="box core" x="650" y="340" width="160" height="60" rx="8"/>
+            <text class="t" x="730" y="367" text-anchor="middle">FastAPI</text>
+            <text class="ts" x="730" y="386" text-anchor="middle">REST · SSE</text>
+
+            <rect class="box" x="860" y="300" width="160" height="56" rx="8"/>
+            <text class="t" x="940" y="325" text-anchor="middle">Веб-интерфейс</text>
+            <text class="ts" x="940" y="343" text-anchor="middle">список · карточка</text>
+
+            <rect class="box" x="860" y="384" width="160" height="56" rx="8"/>
+            <text class="t" x="940" y="409" text-anchor="middle">DevPanel</text>
+            <text class="ts" x="940" y="427" text-anchor="middle">граф + лог в рантайме</text>
+
+            <path class="edge" d="M440,370 H392" marker-end="url(#ar-a)"/>
+            <text class="tl" x="416" y="363" text-anchor="middle">поиск</text>
+            <path class="edge" d="M460,340 V310 H330 V262" marker-end="url(#ar-a)"/>
+            <text class="tl" x="395" y="304" text-anchor="middle">видео по URL</text>
+            <path class="edge" d="M580,340 V300 H700 V262" marker-end="url(#ar-a)"/>
+            <text class="tl" x="640" y="294" text-anchor="middle">факты</text>
+            <path class="edge" d="M770,260 V338" marker-end="url(#ar-a)"/>
+            <text class="tl" x="778" y="304">SQL · kNN</text>
+            <path class="edge" d="M650,384 H602" marker-end="url(#ar-a)"/>
+            <text class="tl" x="626" y="378" text-anchor="middle">запуск</text>
+            <path class="edge" d="M810,358 H835 V328 H858" marker-end="url(#ar-a)"/>
+            <text class="tl" x="838" y="320" text-anchor="end">REST</text>
+            <path class="edge acc" d="M810,384 H835 V412 H858" marker-end="url(#ar-a)"/>
+            <text class="ta" x="831" y="430" text-anchor="end">SSE</text>
+
+            <!-- bus -->
+            <rect class="bus" x="20" y="456" width="790" height="40" rx="8"/>
+            <circle class="emit" cx="44" cy="476" r="4"/>
+            <text class="t" x="58" y="481">Шина событий · Redis Streams</text>
+            <text class="ts" x="300" y="481">каждая точка на схеме публикует сюда событие о каждом действии</text>
+            <path class="edge acc" d="M730,456 V402" marker-end="url(#ar-a)"/>
+            <text class="ta" x="738" y="434">XREAD</text>
+          </svg>
+        </div>
+        <figcaption>Пунктирные рамки — внешние сервисы. Синие — общая инфраструктура. Синяя точка в углу блока значит, что компонент публикует события в шину, которую DevPanel получает через SSE.</figcaption>
+      </figure>
+      <h3>Почему так</h3>
+      <ul class="plain">
+        <li><b>Очередь с приоритетами</b> вместо одного скрипта: новые релизы (высокий приоритет), обновление горячих игр (средний) и backfill (низкий) идут через один лимитер и не мешают друг другу. Упавшая задача повторяется сама, а не роняет весь цикл.</li>
+        <li><b>Raw JSON хранится рядом с нормализованными таблицами.</b> Если позже понадобится новое поле, его можно достать из сохранённых ответов без повторного скрапинга.</li>
+        <li><b>Шина на Redis Streams</b>, а не просто логи: события сохраняются, их можно перемотать, и DevPanel, открытая посреди цикла, догружает историю текущего прогона.</li>
+      </ul>
+    </section>
+
+    <!-- FIELDS -->
+    <section id="fields">
+      <div class="eyebrow">Требования → источник</div>
+      <h2>Откуда берём каждое поле</h2>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>#</th><th>Поле</th><th>Источник в JSON</th><th>Примечание</th></tr></thead>
+          <tbody>
+            <tr><td class="num">1</td><td>Название</td><td class="ep">product.item.title</td><td></td></tr>
+            <tr><td class="num">2</td><td>Обложка</td><td class="ep">images[typeName=mainImage].bucketPath</td><td>Скачиваем и кешируем у себя.</td></tr>
+            <tr><td class="num">3</td><td>Платформы</td><td class="ep">platforms[].name, .slug, .releaseDate</td><td>Свои оценки у каждой платформы. Отдельный запрос по платформе проверим при сборке каркаса.</td></tr>
+            <tr><td class="num">4</td><td>Metascore / Userscore</td><td class="ep">critic-score-summary, user-score-summary</td><td>Metascore 0–100, Userscore 0–10, плюс распределение позитив/нейтрал/негатив. Цвет: <span class="score g">75+</span> <span class="score y">50–74</span> <span class="score r">&lt;50</span></td></tr>
+            <tr><td class="num">5</td><td>Разработчик</td><td class="ep">production.companies[typeName=Developer]</td><td>Издателя берём оттуда же.</td></tr>
+            <tr><td class="num">6</td><td>Описание</td><td class="ep">product.item.description</td><td></td></tr>
+            <tr><td class="num">7</td><td>Видео</td><td class="ep">item.video.embedUrl, manifestUrl</td><td>Плеер JW Player. Бывает пустым или не по теме: у Elden Ring это гайд по DLC.</td></tr>
+            <tr><td class="num">8, 10</td><td>Комментарии и отзывы игроков</td><td class="ep">/reviews/…/user/…</td><td>На Metacritic это одна сущность: текст, оценка, дата, платформа, спойлер. Отдельных комментариев нет, забираем все отзывы.</td></tr>
+            <tr><td class="num">9</td><td>Отзывы критиков</td><td class="ep">/reviews/…/critic/…</td><td>Цитата, оценка, издание, ссылка на полный обзор.</td></tr>
+            <tr><td class="num">11–13</td><td>Саммари, плюсы/минусы, суть игры</td><td>генерирует gemini-3.5-flash-lite</td><td>См. <a href="#ai">AI-слой</a>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- LIFECYCLE -->
+    <section id="lifecycle">
+      <div class="eyebrow">Свежесть данных</div>
+      <h2>Обновление и архив</h2>
+      <p>Каждая игра находится в одном из уровней. Уровень определяет, как часто мы её опрашиваем. Чем старше игра и чем меньше по ней новых отзывов, тем реже опрос. Устаревшие игры не удаляются: они уходят в архив, перестают опрашиваться и скрываются из списка новинок.</p>
+      <figure>
+        <div class="fig wide">
+          <svg viewBox="0 0 1000 290" role="img" aria-label="Уровни опроса: hot каждый час до 14 дней после релиза, warm каждые 6 часов до 45 дней, cool раз в сутки до 90 дней, затем архив. Игра без отзывов попадает в dormant и через 30 дней без отзывов уходит в архив. Всплеск отзывов возвращает игру в hot">
+            <defs><marker id="ar-l" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+
+            <rect class="box" x="20" y="118" width="120" height="44" rx="8"/>
+            <text class="t" x="80" y="145" text-anchor="middle">новая игра</text>
+
+            <rect class="st on" x="190" y="50" width="150" height="44" rx="22"/><text class="ton" x="265" y="76" text-anchor="middle">hot</text>
+            <text class="ts" x="265" y="112" text-anchor="middle">каждый час</text>
+            <rect class="st" x="410" y="50" width="150" height="44" rx="22"/><text class="t" x="485" y="77" text-anchor="middle">warm</text>
+            <text class="ts" x="485" y="112" text-anchor="middle">каждые 6 ч</text>
+            <rect class="st" x="630" y="50" width="150" height="44" rx="22"/><text class="t" x="705" y="77" text-anchor="middle">cool</text>
+            <text class="ts" x="705" y="112" text-anchor="middle">раз в сутки</text>
+            <rect class="box ext" x="850" y="50" width="130" height="44" rx="22"/><text class="t" x="915" y="77" text-anchor="middle">архив</text>
+            <text class="ts" x="915" y="112" text-anchor="middle">не опрашиваем</text>
+
+            <rect class="st" x="410" y="200" width="150" height="44" rx="22"/><text class="t" x="485" y="227" text-anchor="middle">dormant</text>
+            <text class="ts" x="485" y="262" text-anchor="middle">нет отзывов · раз в сутки</text>
+
+            <path class="edge" d="M340,72 H408" marker-end="url(#ar-l)"/>
+            <text class="tl" x="375" y="36" text-anchor="middle">&gt; 14 дн.</text>
+            <path class="edge" d="M560,72 H628" marker-end="url(#ar-l)"/>
+            <text class="tl" x="595" y="36" text-anchor="middle">&gt; 45 дн.</text>
+            <path class="edge" d="M780,72 H848" marker-end="url(#ar-l)"/>
+            <text class="tl" x="815" y="36" text-anchor="middle">&gt; 90 дн. и 7 дн. тишины</text>
+
+            <path class="edge" d="M140,130 H165 V72 H188" marker-end="url(#ar-l)"/>
+            <text class="tl" x="80" y="100" text-anchor="middle">есть отзывы</text>
+            <path class="edge" d="M140,150 H165 V222 H408" marker-end="url(#ar-l)"/>
+            <text class="tl" x="80" y="186" text-anchor="middle">нет отзывов</text>
+
+            <path class="edge acc" d="M705,94 V140 H300 V96" marker-end="url(#ar-l)"/>
+            <text class="ta" x="500" y="134" text-anchor="middle">всплеск: +10% отзывов за сутки</text>
+            <path class="edge" d="M440,200 V160 H250 V96" marker-end="url(#ar-l)"/>
+            <text class="tl" x="345" y="176" text-anchor="middle">появились отзывы</text>
+            <path class="edge" d="M560,222 H915 V96" marker-end="url(#ar-l)"/>
+            <text class="tl" x="740" y="214" text-anchor="middle">30 дней без отзывов</text>
+          </svg>
+        </div>
+        <figcaption>Возраст считается от даты релиза. Синяя стрелка возвращает игру в hot из warm или cool, например после крупного патча или скандала. Пороги стоят в конфиге, их можно подстроить по данным первых недель.</figcaption>
+      </figure>
+      <h3>Что происходит при одном обновлении</h3>
+      <ul class="plain">
+        <li><b>1 запрос на проверку.</b> Скачиваем карточку и сравниваем Metascore, Userscore и счётчики отзывов с сохранёнными. Если ничего не изменилось, обновление на этом заканчивается. Так проходит большинство проверок.</li>
+        <li><b>Дельта отзывов.</b> Если счётчики выросли, читаем отзывы по дате, пока не встретим уже сохранённый. Обычно хватает одной страницы.</li>
+        <li><b>Повторный анализ.</b> Запускается, когда с прошлого анализа прибавилось 20% отзывов или 25 штук, но не чаще раза в 6 часов. При уходе в архив делаем финальный анализ, и дальше он не меняется.</li>
+        <li><b>В интерфейсе</b> список по умолчанию показывает игры моложе 90 дней. Архив открывается фильтром, и в нём работают поиск и «похожие игры».</li>
+      </ul>
+    </section>
+
+    <!-- AI -->
+    <section id="ai">
+      <div class="eyebrow">LLM</div>
+      <h2>AI-слой: пункты 11–13</h2>
+      <p>Каждую игру разбирают три промпта. Ответ приходит JSON по заданной схеме и сразу ложится в таблицы. Слой не привязан к провайдеру: задачи вызывают общий интерфейс <code>LLMProvider</code>. Сейчас у него одна реализация, Gemini; Claude подключается второй. Модель для каждой задачи меняется настройкой.</p>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Задача</th><th>Вход</th><th>Выход (JSON)</th></tr></thead>
+          <tbody>
+            <tr><td>Саммари критиков</td><td>все цитаты критиков с оценками и изданиями</td><td><code>summary</code>, <code>consensus</code>, <code>liked[]</code>, <code>disliked[]</code>, <code>notable_quotes[]</code></td></tr>
+            <tr><td>Саммари игроков</td><td>все отзывы игроков; очень большие объёмы делим на части (map → reduce)</td><td>то же + <code>tech_issues[]</code> и расхождение с критиками</td></tr>
+            <tr><td>Суть игры</td><td>описание, жанры, разработчик, оба саммари, данные IGDB и Steam, если подключены</td><td><code>genre</code>, <code>core_loop</code>, <code>mechanics[]</code>, <code>setting</code>, <code>unique_features[]</code>, <code>comparable_to[]</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>Сколько стоит анализ одной игры</h3>
+      <p>Типичная игра — ~30 тыс. входных и ~3 тыс. выходных токенов. Цены публичные на 14.10.2026. Токены «размышлений» сюда не входят: у Gemini они оплачиваются по цене выхода.</p>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Модель</th><th>Вход / выход за 1M</th><th>Игра</th><th>Batch</th><th>~300 анализов в месяц</th></tr></thead>
+          <tbody>
+            <tr><td>Gemini 3.8 Flash, до 31.12.2026</td><td class="num">$0,75 / $3,75</td><td class="num">$0,034</td><td class="num">$0,017</td><td class="num">≈$5–10</td></tr>
+            <tr><td>Gemini 3.8 Flash, с 01.01.2027</td><td class="num">$1,50 / $7,50</td><td class="num">$0,068</td><td class="num">$0,034</td><td class="num">≈$10–20</td></tr>
+            <tr><td>Claude Haiku 5.5</td><td class="num">$0,10 / $0,50</td><td class="num">$0,005</td><td class="num">—</td><td class="num">≈$1,5</td></tr>
+            <tr><td>Claude Opus 5.5</td><td class="num">$4 / $20</td><td class="num">$0,18</td><td class="num">$0,09</td><td class="num">≈$27–54</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <ul class="plain">
+        <li>Раз полный бэклог не грузим, объём небольшой: около 64 новых игр New Releases в месяц плюс повторные анализы. При таком объёме любая модель стоит меньше $60 в месяц, так что выбирать стоит по качеству.</li>
+        <li><b>Выбрано:</b> gemini-3.5-flash-lite по слепому сравнению моделей Google (4,41 из 5).</li>
+        <li><b>Жизненный цикл анализа:</b> первое чтение — до 300 содержательных отзывов (от 50 слов, без дублей, пропорционально оценкам) и сводка распределения всех оценок; дальше раз в сутки инкремент: прошлый разбор плюс только новые отзывы, списки ограничены (6 плюсов, 6 минусов, 4 цитаты, 4 техпроблемы), новое заменяет слабое, а не добавляется. Повтор — от прироста отзывов с текстом (+20% или +25, минимум 3), не чаще раза в сутки. На тесте трёх крупных игр качество 4,67 из 5 против 4,42 у полного чтения, за жизненный цикл в 2,5 раза дешевле перечитывания выборки.</li>
+        <li><b>Похожие игры</b> строятся не из полной «сути», а из облегчённой: по описанию магазина, чтобы она была у каждой игры, а не только у игр с отзывами. Подробно в разделе <a href="#similar">похожих игр</a>.</li>
+        <li><b>Язык:</b> саммари на русском, цитаты из отзывов на языке оригинала.</li>
+      </ul>
+    </section>
+
+    <!-- SIMILAR -->
+    <section id="similar">
+      <div class="eyebrow">Рекомендации</div>
+      <h2>Похожие игры: облегчённая суть и три сигнала</h2>
+      <p>Полная «суть» есть только у игр с отзывами, а похожие нужны каждой карточке. Поэтому для поиска похожих строим отдельную облегчённую суть по описанию магазина и жанрам (<code>app/ai/light_essence.py</code>). Её строит тот же gemini-3.5-flash-lite по JSON-схеме: игре нужно описание от 150 символов, а пересобирается суть только тогда, когда меняются название, жанры или описание (<code>source_hash</code>). На 273 играх эксперимента все сути вместе стоили $0,16.</p>
+      <figure>
+        <div class="fig wide">
+          <svg viewBox="0 0 1000 210" role="img" aria-label="Описание магазина превращается в облегчённую суть; из неё получаются текст игрового процесса, теги из закрытого словаря и текст мира; тексты превращаются в векторы 768, теги взвешиваются по IDF; три сигнала z-нормируются по запросу и складываются с весами 0,5, 0,3 и 0,2, получается 8 похожих игр и отдельный блок серии">
+            <defs><marker id="ar-s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+
+            <rect class="box" x="20" y="74" width="150" height="60" rx="8"/>
+            <text class="t" x="95" y="101" text-anchor="middle">Описание</text>
+            <text class="ts" x="95" y="120" text-anchor="middle">жанры · ≥150 символов</text>
+
+            <rect class="box core" x="205" y="74" width="160" height="60" rx="8"/>
+            <text class="t" x="285" y="101" text-anchor="middle">Облегчённая суть</text>
+            <text class="ts" x="285" y="120" text-anchor="middle">flash-lite · JSON</text>
+
+            <rect class="box" x="400" y="20" width="170" height="44" rx="8"/>
+            <text class="t" x="485" y="39" text-anchor="middle">gameplay</text>
+            <text class="ts" x="485" y="55" text-anchor="middle">≤450 симв., без имён</text>
+            <rect class="box" x="400" y="82" width="170" height="44" rx="8"/>
+            <text class="t" x="485" y="101" text-anchor="middle">теги</text>
+            <text class="ts" x="485" y="117" text-anchor="middle">закрытый словарь, 100</text>
+            <rect class="box" x="400" y="144" width="170" height="44" rx="8"/>
+            <text class="t" x="485" y="163" text-anchor="middle">world</text>
+            <text class="ts" x="485" y="179" text-anchor="middle">≤300 симв., без имён</text>
+
+            <rect class="box" x="605" y="20" width="170" height="44" rx="8"/>
+            <text class="t" x="690" y="39" text-anchor="middle">вектор 768</text>
+            <text class="ts" x="690" y="55" text-anchor="middle">центрирование</text>
+            <rect class="box" x="605" y="82" width="170" height="44" rx="8"/>
+            <text class="t" x="690" y="101" text-anchor="middle">IDF × вес группы</text>
+            <text class="ts" x="690" y="117" text-anchor="middle">механики весят больше</text>
+            <rect class="box" x="605" y="144" width="170" height="44" rx="8"/>
+            <text class="t" x="690" y="163" text-anchor="middle">вектор 768</text>
+            <text class="ts" x="690" y="179" text-anchor="middle">центрирование</text>
+
+            <rect class="box core" x="815" y="20" width="165" height="168" rx="8"/>
+            <text class="t" x="897" y="46" text-anchor="middle">Слияние</text>
+            <text class="ts" x="897" y="72" text-anchor="middle">z-нормировка</text>
+            <text class="ts" x="897" y="88" text-anchor="middle">по запросу</text>
+            <text class="ta" x="897" y="114" text-anchor="middle">0,5 · игровой процесс</text>
+            <text class="ta" x="897" y="132" text-anchor="middle">0,3 · теги</text>
+            <text class="ta" x="897" y="150" text-anchor="middle">0,2 · мир</text>
+            <text class="ts" x="897" y="174" text-anchor="middle">→ 8 похожих + серия</text>
+
+            <path class="edge" d="M170,104 H203" marker-end="url(#ar-s)"/>
+            <path class="edge" d="M365,104 H382 V42 H398" marker-end="url(#ar-s)"/>
+            <path class="edge" d="M365,104 H398" marker-end="url(#ar-s)"/>
+            <path class="edge" d="M365,104 H382 V166 H398" marker-end="url(#ar-s)"/>
+            <path class="edge" d="M570,42 H603" marker-end="url(#ar-s)"/>
+            <path class="edge" d="M570,104 H603" marker-end="url(#ar-s)"/>
+            <path class="edge" d="M570,166 H603" marker-end="url(#ar-s)"/>
+            <path class="edge acc" d="M775,42 H813" marker-end="url(#ar-s)"/>
+            <path class="edge acc" d="M775,104 H813" marker-end="url(#ar-s)"/>
+            <path class="edge acc" d="M775,166 H813" marker-end="url(#ar-s)"/>
+          </svg>
+        </div>
+        <figcaption>Две грани текстом и одна тегами. Эмбеддинги — gemini-embedding-001, обрезанные до 768 измерений; векторы лежат в <code>game_facets</code>, готовые списки — в <code>similar_games</code>. Жанры Metacritic в формулу не входят.</figcaption>
+      </figure>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Поле сути</th><th>Что в нём</th><th>Зачем так</th></tr></thead>
+          <tbody>
+            <tr><td><code>gameplay</code></td><td>что игрок делает минуту за минутой: цикл, механики, структура, режимы. До 450 символов</td><td>Без названий игр, студий, персонажей и мест. Собственные имена тянут близость к франшизам, а не к игровому процессу.</td></tr>
+            <tr><td><code>world</code></td><td>сеттинг, атмосфера, тон. До 300 символов</td><td>Тоже без собственных имён.</td></tr>
+            <tr><td>теги</td><td>механики (2–6 из 60), перспектива (1 из 7), режимы (1–3 из 5), сеттинг (1–3 из 18), тон (1–2 из 10)</td><td>Закрытый словарь: теги двух игр сравнимы как есть. Значения вне словаря отбрасываются (<code>clean_tags</code>). Они же объясняют в интерфейсе, чем игры похожи.</td></tr>
+            <tr><td><code>series</code></td><td>франшиза, как её знают игроки</td><td>Игры одной серии уходят в отдельный блок и не забивают список похожих.</td></tr>
+            <tr><td><code>genre</code>, <code>comparable_to</code>, <code>confidence</code></td><td>жанр в 2–4 словах, до 4 похожих игр, хватило ли описания</td><td>Жанр входит в текст грани gameplay. Остальное хранится, но в формулу не идёт.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>Формула</h3>
+<pre class="code">score(a, b) = 0.5 · z(gameplay) + 0.3 · z(tags) + 0.2 · z(world)
+
+gameplay, world: косинус центрированных векторов (из каждого вычитаем средний вектор каталога)
+tags:            косинус векторов IDF × √вес группы  (механики 0.5, сеттинг 0.2, тон, перспектива, режимы 0.1)
+z(·):            нормировка по строке запроса: среднее и разброс по всем остальным играм</pre>
+      <ul class="plain">
+        <li><b>Центрирование.</b> Сырые косинусы коротких русских текстов почти у всех пар около 0,8 и мало что различают. После вычитания среднего вектора каталога разброс становится рабочим.</li>
+        <li><b>z-нормировка по запросу.</b> У трёх сигналов разный разброс. Без нормировки сигнал с большим разбросом перевешивал бы остальные, и веса значили бы не то, что в них записано.</li>
+        <li><b>Без жанра Metacritic.</b> В эксперименте жанр как отдельный сигнал ухудшал любую смесь, к которой его добавляли (один он даёт nDCG 0,52). Пока у игры нет граней, карточка показывает запасной список по общему жанру, с пометкой метода.</li>
+        <li><b>Серия отдельно.</b> Для каждой игры храним 8 лучших вне серии (<code>kind=similar</code>) и до 8 игр её серии (<code>kind=series</code>). У каждой пары есть причины: до 4 общих тегов, самые редкие первыми, и насколько каждый сигнал выше средней пары.</li>
+        <li><b>Где живёт.</b> Облегчённые сути и векторы — <code>app/pipeline/facets.py</code>, формула и пересборка списков — <code>app/pipeline/similarity.py</code>. Задачу <code>update_facets</code> ставит в очередь каждый прогон discovery. Она строит сути новых и изменённых игр, считает векторы в пределах суточного лимита и пересобирает все списки, если появились новые векторы.</li>
+      </ul>
+      <h3>Слепой эксперимент, 15.10.2026</h3>
+      <p>273 игры с описанием, 20 запросов, по одному на основной жанр. Top-5 четырёх вариантов слиты в пул из 228 пар и оценены вслепую по шкале 0–2. Отчёт — <code>backend/eval/results/similarity-v1/report.md</code>.</p>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Вариант</th><th>nDCG@5</th><th>Сильные в top-5</th><th>Релевантные в top-5</th><th>Макс. попаданий одной игры</th><th>Ни разу не показаны</th></tr></thead>
+          <tbody>
+            <tr><td>V0 · жанр Metacritic + Metascore</td><td class="num">0,42</td><td class="num">0,11</td><td class="num">0,49</td><td class="num">26</td><td class="num">37%</td></tr>
+            <tr><td>V1 · вся суть одним вектором</td><td class="num">0,81</td><td class="num">0,26</td><td class="num">0,84</td><td class="num">27</td><td class="num">6,6%</td></tr>
+            <tr><td>V2 · только gameplay, центрированный</td><td class="num">0,79</td><td class="num">0,26</td><td class="num">0,80</td><td class="num">15</td><td class="num">4,8%</td></tr>
+            <tr><td>V3 · слияние 4 сигналов</td><td class="num">0,80</td><td class="num">0,31</td><td class="num">0,84</td><td class="num">13</td><td class="num">2,2%</td></tr>
+            <tr><td><b>Выбрано · gameplay + теги + world, 0,5 / 0,3 / 0,2</b></td><td class="num">0,82</td><td class="num">0,30</td><td class="num">—</td><td class="num">14</td><td class="num">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <ul class="plain">
+        <li>Сути против жанра — +0,385 nDCG, бутстреп p&lt;0,001. Между вариантами на сутях разницы нет (p 0,38–0,56).</li>
+        <li>Выигрыш даёт сам текст сути: короткий, про игровой процесс, без имён. Разбиение на грани качество не поднимает, но вдвое снижает «хабы» — игры, которые попадают в выдачу почти к каждому запросу (14 против 27), — и даёт объяснение «чем похожи».</li>
+        <li>Последняя строка — абляция на уже оценённых парах, поэтому не все метрики для неё есть.</li>
+        <li>Ограничения: один оценщик, 20 запросов, только описания магазина, одна модель эмбеддингов (gemini-embedding-2 упёрся в бесплатные 1000 текстов в сутки).</li>
+      </ul>
+    </section>
+
+    <!-- DEEP -->
+    <section id="deep">
+      <div class="eyebrow">Особая механика</div>
+      <h2>Deep analyze: летсплей → факты об игре</h2>
+      <p>Скачивать субтитры чужих видео через официальный API YouTube нельзя: <code>captions.download</code> работает только для владельца видео. Скачивать само видео (yt-dlp и подобные) запрещают условия YouTube, поэтому мы этого не делаем. Зато Gemini API принимает ссылку на публичное видео YouTube и сам смотрит нужные минуты, и кадры, и звук. Это официальный путь Google, и он видит больше транскрипта: интерфейс, бой, меню, а не только слова летсплеера. Поиск — <code>app/sources/youtube.py</code>, промпт и разбор ответа — <code>app/ai/deep.py</code>, задача <code>deep_analyze</code> в arq.</p>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Шаг</th><th>Как</th><th>Оценка</th></tr></thead>
+          <tbody>
+            <tr><td>1. Найти видео</td><td>YouTube Data API v3: <code>search.list</code> «{title} gameplay walkthrough», 15 результатов, только встраиваемые, затем <code>videos.list</code> за длительностью, просмотрами и описанием. Ключ передаётся в заголовке <code>X-goog-api-key</code>, поэтому не попадает в URL, логи и тексты ошибок.</td><td class="num">101 ед. из 10 000 в сутки</td></tr>
+            <tr><td>2. Выбрать летсплей</td><td>Все значимые слова названия игры есть в названии видео; не трейлер, не обзор, не реакция, не стрим. Длина от 10 минут до 3 часов, видео до часа в приоритете. Из подходящих берём самое просматриваемое.</td><td class="num">1–2 с</td></tr>
+            <tr><td>3. Отрезки</td><td>3 отрезка по 5 минут. Если в описании есть главы, отрезки берём по главам, пропуская вступление. Если глав нет, отрезки начинаются на 10%, 45% и 80% длины видео. Начало видео с заставками и меню пропускается в обоих случаях.</td><td class="num">15 мин видео</td></tr>
+            <tr><td>4. Просмотр</td><td>Один запрос к gemini-3.5-flash-lite: ссылка на видео с <code>videoMetadata</code> (начало и конец отрезка), 1 кадр в 5 секунд, низкое разрешение кадра. Это ≈38 токенов на секунду видео со звуком, 15 минут ≈ 34 тыс. токенов.</td><td class="num">≈36 тыс. токенов на анализ</td></tr>
+            <tr><td>5. Факты</td><td>JSON по схеме: совпадает ли видео с игрой, краткое содержание, до 8 фактов, которых нет в описании магазина, показанные механики, что автор хвалит и ругает, технические проблемы. У каждого факта номер отрезка и таймкод; код переводит его во время всего видео и строит ссылку на этот момент (<code>&amp;t=…s</code>).</td><td class="num">—</td></tr>
+            <tr><td>6. Повторное использование</td><td>Готовый анализ 7 дней отдаётся всем без квоты. Если видео не про эту игру, статус <code>mismatch</code>.</td><td class="num">0 токенов</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note"><b>Что ещё не проверено.</b> Работа с YouTube-ссылками в Gemini API помечена как preview, и условия могут поменяться. Принимаются только публичные видео. На бесплатном уровне Google даёт 8 часов YouTube-видео в сутки, и из документации неясно, считаются ли они по отрезкам или по всей длине видео. Поэтому видео до часа идут первыми, а длина всего видео сохраняется в <code>deep_analyses.duration_s</code>, чтобы проверить это по данным.</div>
+      <h3>Другие источники контекста</h3>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Источник</th><th>Что даёт</th><th>Статус</th></tr></thead>
+          <tbody>
+            <tr><td>Полные тексты рецензий</td><td>У каждой рецензии на Metacritic есть ссылка на полный обзор в издании. Там в разы больше деталей о механиках, чем в цитате.</td><td>Храним для анализа, в интерфейсе показываем только выводы и ссылку. Соблюдаем robots.txt изданий.</td></tr>
+            <tr><td>Steam</td><td>Описание, пользовательские теги, отзывы игроков с часами в игре. Мнение после 50 часов весит больше, чем после 20 минут.</td><td>Старый <code>appreviews</code> отключают 22.10.2026, новый метод <code>IUserReviewsService/GetAppReviews</code> работает без ключа.</td></tr>
+            <tr><td>IGDB</td><td>Темы, режимы игры, перспектива, сюжет, список похожих игр. Готовая структура для «сути» и проверка наших «похожих».</td><td>API через аккаунт разработчика Twitch. Условия использования проверить.</td></tr>
+            <tr><td>yt-dlp, сторонние сервисы транскриптов</td><td>Полный текст субтитров.</td><td>Нарушают условия YouTube. Не используем.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- QUOTA -->
+    <section id="quota">
+      <div class="eyebrow">Бесплатный ключ</div>
+      <h2>Квоты: сначала сервис, потом Deep analyze</h2>
+      <p>Анализ отзывов, облегчённые сути, эмбеддинги и Deep analyze работают на одном бесплатном ключе Gemini. Google сбрасывает бесплатные квоты в полночь по тихоокеанскому времени, и сервис считает свои сутки так же (<code>America/Los_Angeles</code>). Правила — в <code>app/pipeline/quota.py</code>, все числа — в настройках.</p>
+      <div class="findings">
+        <div class="finding"><b>1,16M токенов</b><span>больше всего ключ отдал за сутки без отказов. Это нижняя граница, а не известный лимит.</span></div>
+        <div class="finding"><b>80% → 928 тыс.</b><span>бюджет суток, от которого считаются все проверки.</span></div>
+        <div class="finding"><b>190 тыс.</b><span>резерв сервиса: пиковый день анализа отзывов, облегчённые сути ~100 новых игр и 25% на повторы.</span></div>
+        <div class="finding"><b>5 в сутки, 2 на человека</b><span>новых глубоких анализов на всех. Готовые анализы квоту не тратят.</span></div>
+      </div>
+      <figure>
+        <div class="fig wide">
+          <svg viewBox="0 0 1000 150" role="img" aria-label="Суточные токены: из 1,16 миллиона 190 тысяч зарезервировано сервису, 180 тысяч уходит на 5 глубоких анализов, 558 тысяч остаётся свободными, 232 тысячи — запас сверх бюджета 80%">
+            <text class="t" x="188" y="58" text-anchor="end">Токены за сутки</text>
+            <text class="ts" x="188" y="74" text-anchor="end">1,16M</text>
+            <rect class="bar" x="200" y="40" width="124" height="36" rx="3"/>
+            <rect class="bar mute" x="325" y="40" width="117" height="36"/>
+            <rect class="bar soft" x="443" y="40" width="365" height="36"/>
+            <rect class="box ext" x="809" y="40" width="151" height="36" rx="3"/>
+            <text class="ta" x="200" y="30">резерв сервиса 190k</text>
+            <text class="tl" x="325" y="100">5 × 36k deep</text>
+            <text class="tl" x="443" y="30">не занято, 558k: анализы отзывов сверх резерва</text>
+            <text class="tl" x="809" y="100">запас 20%, 232k</text>
+            <line class="edge acc" x1="808" y1="20" x2="808" y2="116" stroke-dasharray="3 3"/>
+            <text class="ta" x="804" y="132" text-anchor="end">бюджет 928k</text>
+          </svg>
+        </div>
+        <figcaption>Резерв сервиса не тратится на Deep analyze, даже если к вечеру сервис его не израсходовал: анализы отзывов и сути новых игр всегда получают токены первыми.</figcaption>
+      </figure>
+      <h3>Когда разрешён новый глубокий анализ</h3>
+      <ul class="plain">
+        <li><b>Общий пул не исчерпан:</b> меньше 5 анализов за текущие сутки. Не считаются попытки, которые не дошли до модели: нет ключа YouTube, нет подходящего видео, ошибка поиска.</li>
+        <li><b>Личный лимит не исчерпан:</b> меньше 2 за сутки. Пользователь — анонимный id, который веб-интерфейс хранит в localStorage и шлёт в <code>X-Client-Id</code>; без него — IP-адрес.</li>
+        <li><b>Бюджет покрывает резерв:</b> потрачено сервисом + потрачено глубокими анализами (незавершённые по оценке 36 тыс.) + ещё не израсходованная часть резерва + 36 тыс. на новый анализ ≤ 928 тыс.</li>
+        <li><b>Готовый анализ бесплатен.</b> Если по игре есть анализ в работе или готовый моложе 7 дней, API отдаёт его без проверки квоты. Два одновременных клика сериализуются advisory-блокировкой Postgres.</li>
+        <li><b>Интерфейс</b> берёт состояние из <code>GET /api/deep/quota</code>: сколько осталось и когда сброс. Отказ <code>POST /api/games/{slug}/deep-analyze</code> возвращает 429 с причиной по-русски.</li>
+      </ul>
+      <h3>Остальные лимиты ключа</h3>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Что</th><th>Лимит бесплатного уровня</th><th>Как держимся</th></tr></thead>
+          <tbody>
+            <tr><td>Эмбеддинги, в сутки</td><td class="num">1000 текстов на модель</td><td>Берём 900. На игру 2 текста (gameplay и world), то есть до 450 игр в сутки. Что не влезло, ждёт следующих суток квоты.</td></tr>
+            <tr><td>Эмбеддинги, в минуту</td><td class="num">100 текстов</td><td>Пачки по 44 текста (22 игры), между пачками пауза 62 с.</td></tr>
+            <tr><td>Генерация, в минуту</td><td class="num">отказ 429 на всплесках</td><td>12 запросов в минуту, не больше 2 одновременно.</td></tr>
+            <tr><td>YouTube Data API</td><td class="num">10 000 единиц в сутки</td><td>Один поиск видео — 101 единица, при пуле в 5 анализов это 5% квоты.</td></tr>
+            <tr><td>YouTube в Gemini</td><td class="num">8 ч видео в сутки</td><td>15 минут на анализ, видео до часа в приоритете. См. <a href="#deep">Deep analyze</a>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- DATA -->
+    <section id="data">
+      <div class="eyebrow">PostgreSQL</div>
+      <h2>Модель данных</h2>
+      <div class="entities">
+        <div class="entity"><h4>games</h4><ul><li><b>id</b> · mc_id · slug ↑</li><li>title · description</li><li>release_date · genres[]</li><li>developer · publisher</li><li>cover_url · video_embed_url</li><li>metascore · userscore</li><li>tier · next_refresh_at</li><li>archived_at</li></ul></div>
+        <div class="entity"><h4>game_platforms</h4><ul><li><b>game_id</b> · platform</li><li>release_date</li><li>metascore · userscore</li><li>critic_count · user_count</li></ul></div>
+        <div class="entity"><h4>reviews</h4><ul><li><b>id</b> (mc uuid / hash)</li><li>game_id · kind: critic | user</li><li>author · publication</li><li>score · date · platform</li><li>quote · url · spoiler</li></ul></div>
+        <div class="entity"><h4>analyses</h4><ul><li><b>game_id</b> · kind: critic | user | essence</li><li>payload jsonb</li><li>reviews_seen · model</li><li>tokens_in · tokens_out · cost</li></ul></div>
+        <div class="entity"><h4>game_facets</h4><ul><li><b>game_id</b> · essence jsonb</li><li>tags[] · series · confidence</li><li>gameplay_vec · world_vec vector(768)</li><li>source_hash · embed_hash</li><li>tokens_in · tokens_out · embedded_at</li></ul></div>
+        <div class="entity"><h4>similar_games</h4><ul><li><b>game_id</b> · kind: similar | series · rank</li><li>other_id · score</li><li>reasons jsonb: теги, сигналы</li><li>computed_at</li></ul></div>
+        <div class="entity"><h4>deep_analyses</h4><ul><li><b>id</b> · game_id · status</li><li>video_id · video_title · views</li><li>duration_s · clip_s</li><li>requested_by · tokens_in · tokens_out</li><li>facts jsonb (таймкоды, ссылки)</li></ul></div>
+        <div class="entity"><h4>raw_responses</h4><ul><li><b>id</b> · endpoint · slug</li><li>http_status · fetched_at</li><li>body jsonb (сжатый)</li></ul></div>
+        <div class="entity"><h4>pipeline_runs / events</h4><ul><li><b>run_id</b> · started_at · stats</li><li>events: ts · stage · slug</li><li>status · http · ms · bytes</li><li>attempt · error</li></ul></div>
+      </div>
+    </section>
+
+    <!-- UI -->
+    <section id="ui">
+      <div class="eyebrow">Продукт</div>
+      <h2>Веб-интерфейс</h2>
+      <div class="screens">
+        <div class="screen"><h3>Список игр</h3><ul><li>Сетка карточек: обложка, название, платформы, <span class="score g">87</span> и Userscore</li><li>Поиск по названию (pg_trgm, опечатки прощаются)</li><li>Фильтр по платформам, мультивыбор</li><li>Сортировка: Metascore, Userscore, дата релиза</li><li>Метка «проанализирована» и время обновления</li></ul></div>
+        <div class="screen"><h3>Карточка игры</h3><ul><li>Шапка: обложка, оценки по платформам, разработчик, видео</li><li>Суть игры: жанр, механики, особенности</li><li>Критики и игроки: саммари, понравилось / не понравилось</li><li>Все отзывы с фильтром и пагинацией</li><li>Похожие игры с общими тегами и отдельный блок серии</li><li>Кнопка Deep analyze с остатком квоты, факты со ссылками на момент видео</li></ul></div>
+      </div>
+    </section>
+
+    <!-- DEVPANEL -->
+    <section id="devpanel">
+      <div class="eyebrow">Наблюдаемость</div>
+      <h2>DevPanel</h2>
+      <p>Слева граф пайплайна: каждый узел показывает очередь, выполненные задачи и ошибки, активный узел подсвечен. Справа живой лог событий с фильтрами по стадии, игре и статусу. Клик по игре показывает все её события и сырой JSON-ответ. Пример ниже собран из реальных цифр замеров.</p>
+      <div class="devpanel" role="img" aria-label="Пример DevPanel: граф стадий с счётчиками и поток событий загрузки">
+        <div class="dp-head"><span class="live">● LIVE</span><span>run r-0412 · 21:00:00</span><span>3,0 rps</span><span>76 запросов · 0 ошибок</span><span>пример</span></div>
+        <div class="dp-body">
+          <div class="dp-nodes">
+            <div class="node"><span>discovery</span><em>2/2</em></div>
+            <div class="node run"><span>fetch.composer</span><em>17/20</em></div>
+            <div class="node run"><span>fetch.critic</span><em>29/35</em></div>
+            <div class="node"><span>fetch.user</span><em>20/20</em></div>
+            <div class="node warn"><span>ai.batch</span><em>ждёт 6</em></div>
+            <div class="node"><span>facets</span><em>0</em></div>
+          </div>
+<div class="dp-log"><span class="dim">21:00:00.112</span> discovery   finder new_releases offset=40      <span class="ok">200</span>  0.53s  20 slugs
+<span class="dim">21:00:00.648</span> fetch       composer trails-in-the-sky-2nd-chapter <span class="ok">200</span>  0.84s  212KB
+<span class="dim">21:00:01.204</span> fetch       user fire-emblem-fortunes-weave  <span class="ok">200</span>  0.38s  257 reviews
+<span class="dim">21:00:07.765</span> fetch       composer aniimo                   <span class="slow">200  7.76s  cold origin</span>
+<span class="dim">21:00:09.031</span> fetch       critic fire-emblem-fortunes-weave <span class="ok">200</span>  0.28s  page 9/10
+<span class="dim">21:00:12.860</span> card.done   fire-emblem-fortunes-weave        12.86s critic=99 user=257
+<span class="dim">21:00:12.861</span> <span class="ai">ai.enqueue  fire-emblem-fortunes-weave        batch=b-77 3 prompts</span></div>
+        </div>
+      </div>
+      <pre class="code">{"ts":"2026-10-14T21:00:07.765Z","run_id":"r-0412","stage":"fetch.composer",
+ "slug":"aniimo","status":"ok","http":200,"ms":7760,"bytes":219874,"attempt":1,"cache":"miss"}</pre>
+      <p>Формат события один на всю систему. Обёртка вокруг httpx-клиента и вокруг каждой задачи arq пишет события сама, руками в коде их вызывать не нужно.</p>
+    </section>
+
+    <!-- STACK -->
+    <section id="stack">
+      <div class="eyebrow">Каркас</div>
+      <h2>Стек и структура репозитория</h2>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Слой</th><th>Выбор</th><th>Зачем</th></tr></thead>
+          <tbody>
+            <tr><td>Бэкенд</td><td>Python 3.12, FastAPI, httpx, SQLAlchemy 2, Alembic</td><td>Асинхронность из коробки, тот же httpx, что в бенчмарке</td></tr>
+            <tr><td>Очередь и cron</td><td>arq на Redis 7</td><td>Асинхронные задачи, cron, ретраи; Redis заодно даёт шину Streams</td></tr>
+            <tr><td>Хранилище</td><td>PostgreSQL 16 + pgvector + pg_trgm</td><td>Одна база для данных, поиска по названию и похожих игр</td></tr>
+            <tr><td>AI</td><td>google-genai за общим интерфейсом <code>LLMProvider</code>, JSON-схемы ответов, gemini-embedding-001</td><td>Пункты 11–13 и похожие игры; модель выбирается настройкой, Claude подключается второй реализацией</td></tr>
+            <tr><td>Deep analyze</td><td>YouTube Data API, Gemini (видео по ссылке)</td><td>Поиск видео, метаданные, анализ видео без скачивания</td></tr>
+            <tr><td>Фронтенд</td><td>React + Vite + TypeScript, TanStack Query, React Flow</td><td>Список и карточка; React Flow рисует граф DevPanel</td></tr>
+            <tr><td>Запуск</td><td>docker compose: api, worker, scheduler, postgres, redis, web</td><td>Docker на машине уже есть</td></tr>
+          </tbody>
+        </table>
+      </div>
+<pre class="code">GameAnalytics/
+├── docker-compose.yml
+├── backend/
+│   ├── app/
+│   │   ├── api/          main.py (REST · SSE · квота Deep analyze)
+│   │   ├── scraper/      client.py (лимитер, ретраи, события) · metacritic.py · normalize.py
+│   │   ├── pipeline/     discovery.py (окна, sweep_range) · ingest.py · tiers.py · top.py · tasks.py (arq)
+│   │   │                 facets.py · similarity.py (похожие игры) · quota.py (сутки и пул)
+│   │   ├── ai/           base.py · gemini.py · analyze.py · selection.py · lifecycle.py · prompts.py
+│   │   │                 light_essence.py (суть для похожих) · deep.py (видео → факты)
+│   │   ├── sources/      youtube.py (Data API v3, выбор видео и отрезков)
+│   │   ├── events/       bus.py (Redis Streams)
+│   │   ├── core/         config.py · db.py
+│   │   └── models.py     SQLAlchemy
+│   ├── eval/             сравнение моделей, стратегии анализа, similarity_test.py → results/
+│   └── tests/            логика пайплайна, окна discovery, квота, похожие, deep · fixtures/ · timing/
+├── frontend/src/pages/   GamesList · GameCard · DevPanel
+├── research/             bench_metacritic.py · catalog_watch.py · nr_watch.py
+└── docs/                 architecture.html · model-comparison.html · token-economics.html</pre>
+    </section>
+
+    <!-- RISKS -->
+    <section id="risks">
+      <div class="eyebrow">Риски</div>
+      <h2>Что может сломаться</h2>
+      <div class="note risk"><b>Условия использования Metacritic.</b> backend.metacritic.com — внутренний API сайта, а не публичный. Его могут закрыть, поменять или начать защищать без предупреждения, а условия Metacritic могут запрещать автоматический сбор. Проверьте условия до запуска в прод. Со своей стороны держим низкий rate, честный User-Agent и кеш, и не трогаем пути из Disallow. Отказ от полного бэклога заметно снижает нагрузку.</div>
+      <div class="note"><b>YouTube в Gemini — preview.</b> Цена и лимиты могут поменяться, а суточные 8 часов видео могут считаться по всей длине ролика. Если функцию закроют, Deep analyze можно перевести на описание и главы из Data API, просто с меньшей глубиной.</div>
+      <div class="note"><b>Бесплатный ключ без известного потолка.</b> Google не публикует точный суточный лимит токенов для ключа. 1,16M — максимум, который ключ отдал без отказов, поэтому бюджет считается от 80% этой цифры. Если Google урежет квоту, первым перестанет запускаться Deep analyze, а анализ отзывов останется в резерве. Эмбеддинги при этом упираются в 1000 текстов в сутки, и полный пересчёт большого каталога растянется на несколько дней.</div>
+      <div class="note"><b>Хрупкость формата.</b> Названия компонентов (<code>critic-score-summary</code> и другие) могут поменяться. Contract-тесты на сохранённых фикстурах и ежечасная проверка схемы сразу покажут поломку в DevPanel.</div>
+      <div class="note"><b>Шум в каталоге.</b> В каталоге New много мелких релизов без рецензий. Они попадают в dormant, анализ не запускается, а через 30 дней без отзывов игра уходит в архив.</div>
+    </section>
+
+    <!-- DECIDE -->
+    <section id="decide">
+      <div class="eyebrow">Статус</div>
+      <h2>Решения</h2>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Вопрос</th><th>Решение</th></tr></thead>
+          <tbody>
+            <tr><td>Глубина загрузки</td><td>Без бэклога. Первый запуск — New Releases за 30 дней, дальше каждый час окно последних трёх дней каталога и New Releases со сверкой с числом игр в API. Ночной sweep за две недели — только по датам, которые часовое окно уже видело.</td></tr>
+            <tr><td>Устаревание</td><td>Уровни hot / warm / cool / dormant и архив, пороги в конфиге.</td></tr>
+            <tr><td>LLM</td><td>gemini-3.5-flash-lite за общим интерфейсом. Первое чтение — отбор 300 содержательных отзывов со сводкой оценок, дальше ежедневный инкремент с лимитами; повтор от прироста отзывов с текстом, не чаще раза в сутки.</td></tr>
+            <tr><td>Похожие игры</td><td>Облегчённая суть по описанию магазина: закрытый словарь тегов, тексты граней без собственных имён. Векторы gemini-embedding-001 768 dim. Оценка 0,5 · игровой процесс + 0,3 · теги + 0,2 · мир, с центрированием и z-нормировкой по запросу, без жанра Metacritic, серия отдельным блоком. Пересчёт задачей <code>update_facets</code> после каждого прогона.</td></tr>
+            <tr><td>Deep analyze</td><td>Поиск через YouTube Data API v3, ключ в заголовке. Gemini смотрит публичное видео по ссылке: 3 отрезка по 5 минут, 1 кадр в 5 с, низкое разрешение (≈38 токенов/с). Факты с таймкодами. yt-dlp не используем: это нарушает условия YouTube.</td></tr>
+            <tr><td>Квоты</td><td>Пул 5 глубоких анализов в сутки, не больше 2 на пользователя, резерв сервиса 190 тыс. токенов, бюджет — 80% от 1,16M. Сутки — до полуночи по тихоокеанскому времени. Эмбеддинги: 1000 текстов в сутки на модель, 100 в минуту.</td></tr>
+            <tr><td>Язык</td><td>Саммари на русском, цитаты в оригинале.</td></tr>
+            <tr><td>Стек</td><td>Python, FastAPI, arq, PostgreSQL + pgvector, React.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Вопрос</th><th>Решение</th></tr></thead>
+          <tbody>
+            <tr><td>Окно первого запуска</td><td>30 дней.</td></tr>
+            <tr><td>Steam, IGDB, полные рецензии</td><td>Следующим этапом.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>Готово в каркасе</h3>
+      <ul class="plain">
+        <li>Сбор, уровни обновления, защита от дублей, шина событий, API, список игр, карточка, DevPanel.</li>
+        <li>LLM-слой на gemini-3.5-flash-lite с жизненным циклом анализа, похожие игры по облегчённой сути, Deep analyze с суточной квотой, ночной sweep по наблюдённым датам.</li>
+        <li>Следующий этап: накопить данные <code>catalog_watch.py</code> и подстроить глубину sweep, проверить, как Google считает 8 часов YouTube, повторить эксперимент похожих с несколькими оценщиками и второй моделью эмбеддингов.</li>
+      </ul>
+    </section>
+
+  </main>
+</div>

@@ -1,0 +1,819 @@
+{
+ "data": {
+  "id": "8a97963d-6333-4dfa-8d43-7c291bc24328",
+  "totalResults": 181118,
+  "items": [
+   {
+    "id": 1300661818,
+    "type": "game-title",
+    "typeId": 13,
+    "title": "Remote Reaper: FPV Drone",
+    "slug": "remote-reaper-fpv-drone",
+    "premiereYear": 2026,
+    "releaseDate": "2026-10-14",
+    "rating": null,
+    "rank": 1,
+    "seoUrl": null,
+    "image": {
+     "id": null,
+     "filename": "6-1-1077396-52.jpg",
+     "dateCreated": {
+      "date": null,
+      "timezone": null
+     },
+     "alt": null,
+     "credits": null,
+     "path": null,
+     "cropGravity": null,
+     "crop": null,
+     "caption": null,
+     "typeName": null,
+     "imageUrl": null,
+     "width": 460,
+     "height": 215,
+     "sType": null,
+     "bucketType": "catalog",
+     "bucketPath": "/provider/6/12/6-1-1077396-52.jpg",
+     "mediaType": null,
+     "provider": null
+    },
+    "criticScoreSummary": {
+     "url": "/game/remote-reaper-fpv-drone/critic-reviews/",
+     "max": 100,
+     "score": null,
+     "reviewCount": 0,
+     "positiveCount": 0,
+     "neutralCount": 0,
+     "negativeCount": 0,
+     "sentiment": "tbd"
+    },
+    "genres": [
+     {
+      "id": null,
+      "name": "Aircraft Combat Sim"
+     }
+    ],
+    "numberOfSeasons": 0,
+    "season": null,
+    "network": null,
+    "platforms": [
+     {
+      "id": 1500000019,
+      "name": "PC"
+     }
+    ],
+    "inTheaters": false,
+    "description": "FPV drone simulator. [text removed]",
+    "duration": 0,
+    "streamingDates": {
+     "videoClosestPastAvailableDate": null,
+     "videoClosestFutureAvailableDate": null,
+     "videoClosestPastExpiryDate": null,
+     "videoClosestFutureExpiryDate": null,
+     "videoClosestPastAvailableNetworkId": null,
+     "videoClosestFutureAvailableNetworkId": null,
+     "videoClosestPastExpiryNetworkId": null,
+     "videoClosestFutureExpiryNetworkId": null,
+     "networkStreamingDates": null
+    },
+    "userScore": {
+     "score": null
+    }
+   },
+   {
+    "id": 1300665358,
+    "type": "game-title",
+    "typeId": 13,
+    "title": "Blessing In The Darkness",
+    "slug": "blessing-in-the-darkness",
+    "premiereYear": 2026,
+    "releaseDate": "2026-10-14",
+    "rating": null,
+    "rank": 1,
+    "seoUrl": null,
+    "image": {
+     "id": null,
+     "filename": "6-1-1084246-52.jpg",
+     "dateCreated": {
+      "date": null,
+      "timezone": null
+     },
+     "alt": null,
+     "credits": null,
+     "path": null,
+     "cropGravity": null,
+     "crop": null,
+     "caption": null,
+     "typeName": null,
+     "imageUrl": null,
+     "width": 460,
+     "height": 215,
+     "sType": null,
+     "bucketType": "catalog",
+     "bucketPath": "/provider/6/12/6-1-1084246-52.jpg",
+     "mediaType": null,
+     "provider": null
+    },
+    "criticScoreSummary": {
+     "url": "/game/blessing-in-the-darkness/critic-reviews/",
+     "max": 100,
+     "score": null,
+     "reviewCount": 0,
+     "positiveCount": 0,
+     "neutralCount": 0,
+     "negativeCount": 0,
+     "sentiment": "tbd"
+    },
+    "genres": [
+     {
+      "id": null,
+      "name": "RPG"
+     }
+    ],
+    "numberOfSeasons": 0,
+    "season": null,
+    "network": null,
+    "platforms": [
+     {
+      "id": 1500000019,
+      "name": "PC"
+     }
+    ],
+    "inTheaters": false,
+    "description": null,
+    "duration": 0,
+    "streamingDates": {
+     "videoClosestPastAvailableDate": null,
+     "videoClosestFutureAvailableDate": null,
+     "videoClosestPastExpiryDate": null,
+     "videoClosestFutureExpiryDate": null,
+     "videoClosestPastAvailableNetworkId": null,
+     "videoClosestFutureAvailableNetworkId": null,
+     "videoClosestPastExpiryNetworkId": null,
+     "videoClosestFutureExpiryNetworkId": null,
+     "networkStreamingDates": null
+    },
+    "userScore": {
+     "score": null
+    }
+   },
+   {
+    "id": 1300697912,
+    "type": "game-title",
+    "typeId": 13,
+    "title": "NIPH",
+    "slug": "niph",
+    "premiereYear": 2026,
+    "releaseDate": "2026-10-14",
+    "rating": null,
+    "rank": 1,
+    "seoUrl": null,
+    "image": {
+     "id": null,
+     "filename": "6-1-1150836-52.jpg",
+     "dateCreated": {
+      "date": null,
+      "timezone": null
+     },
+     "alt": null,
+     "credits": null,
+     "path": null,
+     "cropGravity": null,
+     "crop": null,
+     "caption": null,
+     "typeName": null,
+     "imageUrl": null,
+     "width": 460,
+     "height": 215,
+     "sType": null,
+     "bucketType": "catalog",
+     "bucketPath": "/provider/6/12/6-1-1150836-52.jpg",
+     "mediaType": null,
+     "provider": null
+    },
+    "criticScoreSummary": {
+     "url": "/game/niph/critic-reviews/",
+     "max": 100,
+     "score": null,
+     "reviewCount": 0,
+     "positiveCount": 0,
+     "neutralCount": 0,
+     "negativeCount": 0,
+     "sentiment": "tbd"
+    },
+    "genres": [
+     {
+      "id": null,
+      "name": "2D Platformer"
+     }
+    ],
+    "numberOfSeasons": 0,
+    "season": null,
+    "network": null,
+    "platforms": [
+     {
+      "id": 1500000019,
+      "name": "PC"
+     }
+    ],
+    "inTheaters": false,
+    "description": "NIPH is a [text removed]",
+    "duration": 0,
+    "streamingDates": {
+     "videoClosestPastAvailableDate": null,
+     "videoClosestFutureAvailableDate": null,
+     "videoClosestPastExpiryDate": null,
+     "videoClosestFutureExpiryDate": null,
+     "videoClosestPastAvailableNetworkId": null,
+     "videoClosestFutureAvailableNetworkId": null,
+     "videoClosestPastExpiryNetworkId": null,
+     "videoClosestFutureExpiryNetworkId": null,
+     "networkStreamingDates": null
+    },
+    "userScore": {
+     "score": null
+    }
+   },
+   {
+    "id": 1300604157,
+    "type": "game-title",
+    "typeId": 13,
+    "title": "Thanks, Light.",
+    "slug": "thanks-light",
+    "premiereYear": 2026,
+    "releaseDate": "2026-10-14",
+    "rating": null,
+    "rank": 1,
+    "seoUrl": null,
+    "image": {
+     "id": null,
+     "filename": "6-1-956357-52.jpg",
+     "dateCreated": {
+      "date": null,
+      "timezone": null
+     },
+     "alt": null,
+     "credits": null,
+     "path": null,
+     "cropGravity": null,
+     "crop": null,
+     "caption": null,
+     "typeName": null,
+     "imageUrl": null,
+     "width": 460,
+     "height": 215,
+     "sType": null,
+     "bucketType": "catalog",
+     "bucketPath": "/provider/6/12/6-1-956357-52.jpg",
+     "mediaType": null,
+     "provider": null
+    },
+    "criticScoreSummary": {
+     "url": "/game/thanks-light/critic-reviews/",
+     "max": 100,
+     "score": null,
+     "reviewCount": 0,
+     "positiveCount": 0,
+     "neutralCount": 0,
+     "negativeCount": 0,
+     "sentiment": "tbd"
+    },
+    "genres": [
+     {
+      "id": null,
+      "name": "Adventure"
+     }
+    ],
+    "numberOfSeasons": 0,
+    "season": null,
+    "network": null,
+    "platforms": [
+     {
+      "id": 1500000019,
+      "name": "PC"
+     }
+    ],
+    "inTheaters": false,
+    "description": null,
+    "duration": 0,
+    "streamingDates": {
+     "videoClosestPastAvailableDate": null,
+     "videoClosestFutureAvailableDate": null,
+     "videoClosestPastExpiryDate": null,
+     "videoClosestFutureExpiryDate": null,
+     "videoClosestPastAvailableNetworkId": null,
+     "videoClosestFutureAvailableNetworkId": null,
+     "videoClosestPastExpiryNetworkId": null,
+     "videoClosestFutureExpiryNetworkId": null,
+     "networkStreamingDates": null
+    },
+    "userScore": {
+     "score": null
+    }
+   },
+   {
+    "id": 1300618409,
+    "type": "game-title",
+    "typeId": 13,
+    "title": "Unrivaled Heroes: 2.5D Brawler",
+    "slug": "unrivaled-heroes-25d-brawler",
+    "premiereYear": 2026,
+    "releaseDate": "2026-10-14",
+    "rating": null,
+    "rank": 1,
+    "seoUrl": null,
+    "image": {
+     "id": null,
+     "filename": "6-1-986191-52.jpg",
+     "dateCreated": {
+      "date": null,
+      "timezone": null
+     },
+     "alt": null,
+     "credits": null,
+     "path": null,
+     "cropGravity": null,
+     "crop": null,
+     "caption": null,
+     "typeName": null,
+     "imageUrl": null,
+     "width": 460,
+     "height": 215,
+     "sType": null,
+     "bucketType": "catalog",
+     "bucketPath": "/provider/6/12/6-1-986191-52.jpg",
+     "mediaType": null,
+     "provider": null
+    },
+    "criticScoreSummary": {
+     "url": "/game/unrivaled-heroes-25d-brawler/critic-reviews/",
+     "max": 100,
+     "score": null,
+     "reviewCount": 0,
+     "positiveCount": 0,
+     "neutralCount": 0,
+     "negativeCount": 0,
+     "sentiment": "tbd"
+    },
+    "genres": [
+     {
+      "id": null,
+      "name": "2D Beat-'Em-Up"
+     }
+    ],
+    "numberOfSeasons": 0,
+    "season": null,
+    "network": null,
+    "platforms": [
+     {
+      "id": 1500000019,
+      "name": "PC"
+     }
+    ],
+    "inTheaters": false,
+    "description": "Unrivaled Heroes: 2.5D [text removed]",
+    "duration": 0,
+    "streamingDates": {
+     "videoClosestPastAvailableDate": null,
+     "videoClosestFutureAvailableDate": null,
+     "videoClosestPastExpiryDate": null,
+     "videoClosestFutureExpiryDate": null,
+     "videoClosestPastAvailableNetworkId": null,
+     "videoClosestFutureAvailableNetworkId": null,
+     "videoClosestPastExpiryNetworkId": null,
+     "videoClosestFutureExpiryNetworkId": null,
+     "networkStreamingDates": null
+    },
+    "userScore": {
+     "score": null
+    }
+   },
+   {
+    "id": 1300642587,
+    "type": "game-title",
+    "typeId": 13,
+    "title": "SuperTrucks Multiplayer Racing",
+    "slug": "supertrucks-multiplayer-racing",
+    "premiereYear": 2026,
+    "releaseDate": "2026-10-14",
+    "rating": null,
+    "rank": 1,
+    "seoUrl": null,
+    "image": {
+     "id": null,
+     "filename": "6-1-1037795-52.jpg",
+     "dateCreated": {
+      "date": null,
+      "timezone": null
+     },
+     "alt": null,
+     "credits": null,
+     "path": null,
+     "cropGravity": null,
+     "crop": null,
+     "caption": null,
+     "typeName": null,
+     "imageUrl": null,
+     "width": 460,
+     "height": 215,
+     "sType": null,
+     "bucketType": "catalog",
+     "bucketPath": "/provider/6/12/6-1-1037795-52.jpg",
+     "mediaType": null,
+     "provider": null
+    },
+    "criticScoreSummary": {
+     "url": "/game/supertrucks-multiplayer-racing/critic-reviews/",
+     "max": 100,
+     "score": null,
+     "reviewCount": 0,
+     "positiveCount": 0,
+     "neutralCount": 0,
+     "negativeCount": 0,
+     "sentiment": "tbd"
+    },
+    "genres": [
+     {
+      "id": null,
+      "name": "Auto Racing"
+     }
+    ],
+    "numberOfSeasons": 0,
+    "season": null,
+    "network": null,
+    "platforms": [
+     {
+      "id": 1500000019,
+      "name": "PC"
+     }
+    ],
+    "inTheaters": false,
+    "description": null,
+    "duration": 0,
+    "streamingDates": {
+     "videoClosestPastAvailableDate": null,
+     "videoClosestFutureAvailableDate": null,
+     "videoClosestPastExpiryDate": null,
+     "videoClosestFutureExpiryDate": null,
+     "videoClosestPastAvailableNetworkId": null,
+     "videoClosestFutureAvailableNetworkId": null,
+     "videoClosestPastExpiryNetworkId": null,
+     "videoClosestFutureExpiryNetworkId": null,
+     "networkStreamingDates": null
+    },
+    "userScore": {
+     "score": null
+    }
+   },
+   {
+    "id": 1300742102,
+    "type": "game-title",
+    "typeId": 13,
+    "title": "Rockfall",
+    "slug": "rockfall",
+    "premiereYear": 2026,
+    "releaseDate": "2026-10-14",
+    "rating": null,
+    "rank": 1,
+    "seoUrl": null,
+    "image": {
+     "id": null,
+     "filename": "6-1-1246333-52.jpg",
+     "dateCreated": {
+      "date": null,
+      "timezone": null
+     },
+     "alt": null,
+     "credits": null,
+     "path": null,
+     "cropGravity": null,
+     "crop": null,
+     "caption": null,
+     "typeName": null,
+     "imageUrl": null,
+     "width": 460,
+     "height": 215,
+     "sType": null,
+     "bucketType": "catalog",
+     "bucketPath": "/provider/6/12/6-1-1246333-52.jpg",
+     "mediaType": null,
+     "provider": null
+    },
+    "criticScoreSummary": {
+     "url": "/game/rockfall/critic-reviews/",
+     "max": 100,
+     "score": null,
+     "reviewCount": 0,
+     "positiveCount": 0,
+     "neutralCount": 0,
+     "negativeCount": 0,
+     "sentiment": "tbd"
+    },
+    "genres": [
+     {
+      "id": null,
+      "name": "Action Adventure"
+     }
+    ],
+    "numberOfSeasons": 0,
+    "season": null,
+    "network": null,
+    "platforms": [
+     {
+      "id": 1500000019,
+      "name": "PC"
+     }
+    ],
+    "inTheaters": false,
+    "description": "Rockfall is a [text removed]",
+    "duration": 0,
+    "streamingDates": {
+     "videoClosestPastAvailableDate": null,
+     "videoClosestFutureAvailableDate": null,
+     "videoClosestPastExpiryDate": null,
+     "videoClosestFutureExpiryDate": null,
+     "videoClosestPastAvailableNetworkId": null,
+     "videoClosestFutureAvailableNetworkId": null,
+     "videoClosestPastExpiryNetworkId": null,
+     "videoClosestFutureExpiryNetworkId": null,
+     "networkStreamingDates": null
+    },
+    "userScore": {
+     "score": null
+    }
+   },
+   {
+    "id": 1300752646,
+    "type": "game-title",
+    "typeId": 13,
+    "title": "Gallery Organizer",
+    "slug": "gallery-organizer",
+    "premiereYear": 2026,
+    "releaseDate": "2026-10-14",
+    "rating": null,
+    "rank": 1,
+    "seoUrl": null,
+    "image": {
+     "id": null,
+     "filename": "6-1-1265472-52.jpg",
+     "dateCreated": {
+      "date": null,
+      "timezone": null
+     },
+     "alt": null,
+     "credits": null,
+     "path": null,
+     "cropGravity": null,
+     "crop": null,
+     "caption": null,
+     "typeName": null,
+     "imageUrl": null,
+     "width": 460,
+     "height": 215,
+     "sType": null,
+     "bucketType": "catalog",
+     "bucketPath": "/provider/6/12/6-1-1265472-52.jpg",
+     "mediaType": null,
+     "provider": null
+    },
+    "criticScoreSummary": {
+     "url": "/game/gallery-organizer/critic-reviews/",
+     "max": 100,
+     "score": null,
+     "reviewCount": 0,
+     "positiveCount": 0,
+     "neutralCount": 0,
+     "negativeCount": 0,
+     "sentiment": "tbd"
+    },
+    "genres": [
+     {
+      "id": null,
+      "name": "Simulation"
+     }
+    ],
+    "numberOfSeasons": 0,
+    "season": null,
+    "network": null,
+    "platforms": [
+     {
+      "id": 1500000019,
+      "name": "PC"
+     }
+    ],
+    "inTheaters": false,
+    "description": "A cozy organizing [text removed]",
+    "duration": 0,
+    "streamingDates": {
+     "videoClosestPastAvailableDate": null,
+     "videoClosestFutureAvailableDate": null,
+     "videoClosestPastExpiryDate": null,
+     "videoClosestFutureExpiryDate": null,
+     "videoClosestPastAvailableNetworkId": null,
+     "videoClosestFutureAvailableNetworkId": null,
+     "videoClosestPastExpiryNetworkId": null,
+     "videoClosestFutureExpiryNetworkId": null,
+     "networkStreamingDates": null
+    },
+    "userScore": {
+     "score": null
+    }
+   },
+   {
+    "id": 1300712525,
+    "type": "game-title",
+    "typeId": 13,
+    "title": "Cozy Builder",
+    "slug": "cozy-builder",
+    "premiereYear": 2026,
+    "releaseDate": "2026-10-14",
+    "rating": null,
+    "rank": 1,
+    "seoUrl": null,
+    "image": {
+     "id": null,
+     "filename": "6-1-1185006-52.jpg",
+     "dateCreated": {
+      "date": null,
+      "timezone": null
+     },
+     "alt": null,
+     "credits": null,
+     "path": null,
+     "cropGravity": null,
+     "crop": null,
+     "caption": null,
+     "typeName": null,
+     "imageUrl": null,
+     "width": 460,
+     "height": 215,
+     "sType": null,
+     "bucketType": "catalog",
+     "bucketPath": "/provider/6/12/6-1-1185006-52.jpg",
+     "mediaType": null,
+     "provider": null
+    },
+    "criticScoreSummary": {
+     "url": "/game/cozy-builder/critic-reviews/",
+     "max": 100,
+     "score": null,
+     "reviewCount": 0,
+     "positiveCount": 0,
+     "neutralCount": 0,
+     "negativeCount": 0,
+     "sentiment": "tbd"
+    },
+    "genres": [
+     {
+      "id": null,
+      "name": "Management"
+     }
+    ],
+    "numberOfSeasons": 0,
+    "season": null,
+    "network": null,
+    "platforms": [
+     {
+      "id": 1500000019,
+      "name": "PC"
+     }
+    ],
+    "inTheaters": false,
+    "description": null,
+    "duration": 0,
+    "streamingDates": {
+     "videoClosestPastAvailableDate": null,
+     "videoClosestFutureAvailableDate": null,
+     "videoClosestPastExpiryDate": null,
+     "videoClosestFutureExpiryDate": null,
+     "videoClosestPastAvailableNetworkId": null,
+     "videoClosestFutureAvailableNetworkId": null,
+     "videoClosestPastExpiryNetworkId": null,
+     "videoClosestFutureExpiryNetworkId": null,
+     "networkStreamingDates": null
+    },
+    "userScore": {
+     "score": null
+    }
+   },
+   {
+    "id": 1300719246,
+    "type": "game-title",
+    "typeId": 13,
+    "title": "Horrorvania",
+    "slug": "horrorvania",
+    "premiereYear": 2026,
+    "releaseDate": "2026-10-14",
+    "rating": null,
+    "rank": 1,
+    "seoUrl": null,
+    "image": {
+     "id": null,
+     "filename": "6-1-1199770-52.jpg",
+     "dateCreated": {
+      "date": null,
+      "timezone": null
+     },
+     "alt": null,
+     "credits": null,
+     "path": null,
+     "cropGravity": null,
+     "crop": null,
+     "caption": null,
+     "typeName": null,
+     "imageUrl": null,
+     "width": 460,
+     "height": 215,
+     "sType": null,
+     "bucketType": "catalog",
+     "bucketPath": "/provider/6/12/6-1-1199770-52.jpg",
+     "mediaType": null,
+     "provider": null
+    },
+    "criticScoreSummary": {
+     "url": "/game/horrorvania/critic-reviews/",
+     "max": 100,
+     "score": null,
+     "reviewCount": 0,
+     "positiveCount": 0,
+     "neutralCount": 0,
+     "negativeCount": 0,
+     "sentiment": "tbd"
+    },
+    "genres": [
+     {
+      "id": null,
+      "name": "Action"
+     }
+    ],
+    "numberOfSeasons": 0,
+    "season": null,
+    "network": null,
+    "platforms": [
+     {
+      "id": 1500000019,
+      "name": "PC"
+     }
+    ],
+    "inTheaters": false,
+    "description": null,
+    "duration": 0,
+    "streamingDates": {
+     "videoClosestPastAvailableDate": null,
+     "videoClosestFutureAvailableDate": null,
+     "videoClosestPastExpiryDate": null,
+     "videoClosestFutureExpiryDate": null,
+     "videoClosestPastAvailableNetworkId": null,
+     "videoClosestFutureAvailableNetworkId": null,
+     "videoClosestPastExpiryNetworkId": null,
+     "videoClosestFutureExpiryNetworkId": null,
+     "networkStreamingDates": null
+    },
+    "userScore": {
+     "score": null
+    }
+   }
+  ],
+  "genres": null,
+  "network": null
+ },
+ "links": {
+  "self": {
+   "href": "https://backend.metacritic.com/finder/metacritic/web?sortBy=-releaseDate&productType=games&offset=0&limit=50",
+   "meta": {
+    "pageNum": 1,
+    "count": 50
+   }
+  },
+  "prev": {
+   "href": null,
+   "meta": null
+  },
+  "next": {
+   "href": "https://backend.metacritic.com/finder/metacritic/web?sortBy=-releaseDate&productType=games&offset=50&limit=50",
+   "meta": {
+    "pageNum": 2,
+    "count": 50
+   }
+  },
+  "first": {
+   "href": "https://backend.metacritic.com/finder/metacritic/web?sortBy=-releaseDate&productType=games&offset=0&limit=50",
+   "meta": {
+    "pageNum": 1,
+    "count": 50
+   }
+  },
+  "last": {
+   "href": "https://backend.metacritic.com/finder/metacritic/web?sortBy=-releaseDate&productType=games&offset=181100&limit=50",
+   "meta": {
+    "pageNum": 3623,
+    "count": 18
+   }
+  }
+ },
+ "meta": {
+  "componentName": null,
+  "componentDisplayName": null,
+  "componentType": null
+ }
+}

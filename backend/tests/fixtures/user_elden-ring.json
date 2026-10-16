@@ -1,0 +1,864 @@
+{
+ "data": {
+  "id": "1400627895",
+  "totalResults": 6631,
+  "items": [
+   {
+    "id": "b4d603b2-7d56-49ec-a2c7-a4b7ace06b98",
+    "quote": "Jeu surcôté, scaling [text removed]",
+    "score": 0,
+    "thumbsUp": null,
+    "thumbsDown": null,
+    "date": "2026-10-13",
+    "author": "user1",
+    "version": 1791923617732,
+    "spoiler": false,
+    "reviewedProduct": {
+     "id": 1400627895,
+     "type": "games",
+     "title": "Elden Ring",
+     "url": "/game/elden-ring/",
+     "platform": {
+      "id": 1500000128,
+      "name": "PlayStation 5"
+     },
+     "gameTaxonomy": {
+      "family": {
+       "id": 1200497664,
+       "name": "Elden Ring"
+      },
+      "title": {
+       "id": 1300501979,
+       "name": "Elden Ring"
+      },
+      "game": {
+       "id": 1400627895,
+       "name": "Elden Ring"
+      },
+      "platform": {
+       "id": 1500000128,
+       "name": "PlayStation 5"
+      }
+     }
+    },
+    "platform": "PlayStation 5"
+   },
+   {
+    "id": "d79c7318-42fb-4589-8e03-7cfd302319ca",
+    "quote": "One of the [text removed]",
+    "score": 10,
+    "thumbsUp": null,
+    "thumbsDown": null,
+    "date": "2026-10-11",
+    "author": "user2",
+    "version": 1791739901365,
+    "spoiler": false,
+    "reviewedProduct": {
+     "id": 1400627895,
+     "type": "games",
+     "title": "Elden Ring",
+     "url": "/game/elden-ring/",
+     "platform": {
+      "id": 1500000128,
+      "name": "PlayStation 5"
+     },
+     "gameTaxonomy": {
+      "family": {
+       "id": 1200497664,
+       "name": "Elden Ring"
+      },
+      "title": {
+       "id": 1300501979,
+       "name": "Elden Ring"
+      },
+      "game": {
+       "id": 1400627895,
+       "name": "Elden Ring"
+      },
+      "platform": {
+       "id": 1500000128,
+       "name": "PlayStation 5"
+      }
+     }
+    },
+    "platform": "PlayStation 5"
+   },
+   {
+    "id": "a229129b-e823-4b7c-8b8c-8479d553e781",
+    "quote": "Awesome game from [text removed]",
+    "score": 9,
+    "thumbsUp": null,
+    "thumbsDown": null,
+    "date": "2026-10-10",
+    "author": "user3",
+    "version": 1791671935156,
+    "spoiler": false,
+    "reviewedProduct": {
+     "id": 1400627895,
+     "type": "games",
+     "title": "Elden Ring",
+     "url": "/game/elden-ring/",
+     "platform": {
+      "id": 1500000128,
+      "name": "PlayStation 5"
+     },
+     "gameTaxonomy": {
+      "family": {
+       "id": 1200497664,
+       "name": "Elden Ring"
+      },
+      "title": {
+       "id": 1300501979,
+       "name": "Elden Ring"
+      },
+      "game": {
+       "id": 1400627895,
+       "name": "Elden Ring"
+      },
+      "platform": {
+       "id": 1500000128,
+       "name": "PlayStation 5"
+      }
+     }
+    },
+    "platform": "PlayStation 5"
+   },
+   {
+    "id": "6d3ab2ca-070f-4596-a928-1a6e04e5e536",
+    "quote": "Amazing, the only [text removed]",
+    "score": 9,
+    "thumbsUp": null,
+    "thumbsDown": null,
+    "date": "2026-10-10",
+    "author": "user4",
+    "version": 1791622995870,
+    "spoiler": false,
+    "reviewedProduct": {
+     "id": 1400627895,
+     "type": "games",
+     "title": "Elden Ring",
+     "url": "/game/elden-ring/",
+     "platform": {
+      "id": 1500000128,
+      "name": "PlayStation 5"
+     },
+     "gameTaxonomy": {
+      "family": {
+       "id": 1200497664,
+       "name": "Elden Ring"
+      },
+      "title": {
+       "id": 1300501979,
+       "name": "Elden Ring"
+      },
+      "game": {
+       "id": 1400627895,
+       "name": "Elden Ring"
+      },
+      "platform": {
+       "id": 1500000128,
+       "name": "PlayStation 5"
+      }
+     }
+    },
+    "platform": "PlayStation 5"
+   },
+   {
+    "id": "91bea82f-9e45-4693-ba6b-a3f1fec26c0e",
+    "quote": "A master piece [text removed]",
+    "score": 10,
+    "thumbsUp": null,
+    "thumbsDown": null,
+    "date": "2026-10-10",
+    "author": "user5",
+    "version": 1791597740273,
+    "spoiler": false,
+    "reviewedProduct": {
+     "id": 1400627895,
+     "type": "games",
+     "title": "Elden Ring",
+     "url": "/game/elden-ring/",
+     "platform": {
+      "id": 1500000128,
+      "name": "PlayStation 5"
+     },
+     "gameTaxonomy": {
+      "family": {
+       "id": 1200497664,
+       "name": "Elden Ring"
+      },
+      "title": {
+       "id": 1300501979,
+       "name": "Elden Ring"
+      },
+      "game": {
+       "id": 1400627895,
+       "name": "Elden Ring"
+      },
+      "platform": {
+       "id": 1500000128,
+       "name": "PlayStation 5"
+      }
+     }
+    },
+    "platform": "PlayStation 5"
+   },
+   {
+    "id": "ce3924d6-c788-4148-b4dd-20c4b8b2abc7",
+    "quote": "Elden Ring is [text removed]",
+    "score": 7,
+    "thumbsUp": null,
+    "thumbsDown": null,
+    "date": "2025-09-26",
+    "author": "user6",
+    "version": 1791163196476,
+    "spoiler": false,
+    "reviewedProduct": {
+     "id": 1400627895,
+     "type": "games",
+     "title": "Elden Ring",
+     "url": "/game/elden-ring/",
+     "platform": {
+      "id": 1500000128,
+      "name": "PlayStation 5"
+     },
+     "gameTaxonomy": {
+      "family": {
+       "id": 1200497664,
+       "name": "Elden Ring"
+      },
+      "title": {
+       "id": 1300501979,
+       "name": "Elden Ring"
+      },
+      "game": {
+       "id": 1400627895,
+       "name": "Elden Ring"
+      },
+      "platform": {
+       "id": 1500000128,
+       "name": "PlayStation 5"
+      }
+     }
+    },
+    "platform": "PlayStation 5"
+   },
+   {
+    "id": "f1691b6a-13ec-4b0a-8f60-ebfaddf3afa3",
+    "quote": "As an RPG, [text removed]",
+    "score": 8,
+    "thumbsUp": null,
+    "thumbsDown": null,
+    "date": "2026-10-04",
+    "author": "user7",
+    "version": 1791143331967,
+    "spoiler": false,
+    "reviewedProduct": {
+     "id": 1400627895,
+     "type": "games",
+     "title": "Elden Ring",
+     "url": "/game/elden-ring/",
+     "platform": {
+      "id": 1500000128,
+      "name": "PlayStation 5"
+     },
+     "gameTaxonomy": {
+      "family": {
+       "id": 1200497664,
+       "name": "Elden Ring"
+      },
+      "title": {
+       "id": 1300501979,
+       "name": "Elden Ring"
+      },
+      "game": {
+       "id": 1400627895,
+       "name": "Elden Ring"
+      },
+      "platform": {
+       "id": 1500000128,
+       "name": "PlayStation 5"
+      }
+     }
+    },
+    "platform": "PlayStation 5"
+   },
+   {
+    "id": "b6b52b07-1243-4149-85ad-62c1f908a81f",
+    "quote": "This game is [text removed]",
+    "score": 10,
+    "thumbsUp": null,
+    "thumbsDown": null,
+    "date": "2026-10-04",
+    "author": "user8",
+    "version": 1791100186302,
+    "spoiler": false,
+    "reviewedProduct": {
+     "id": 1400627895,
+     "type": "games",
+     "title": "Elden Ring",
+     "url": "/game/elden-ring/",
+     "platform": {
+      "id": 1500000128,
+      "name": "PlayStation 5"
+     },
+     "gameTaxonomy": {
+      "family": {
+       "id": 1200497664,
+       "name": "Elden Ring"
+      },
+      "title": {
+       "id": 1300501979,
+       "name": "Elden Ring"
+      },
+      "game": {
+       "id": 1400627895,
+       "name": "Elden Ring"
+      },
+      "platform": {
+       "id": 1500000128,
+       "name": "PlayStation 5"
+      }
+     }
+    },
+    "platform": "PlayStation 5"
+   },
+   {
+    "id": "39a89753-f089-4b3b-8248-603d1fa7884f",
+    "quote": "My first entry [text removed]",
+    "score": 10,
+    "thumbsUp": null,
+    "thumbsDown": null,
+    "date": "2026-10-03",
+    "author": "user9",
+    "version": 1791067131536,
+    "spoiler": false,
+    "reviewedProduct": {
+     "id": 1400627895,
+     "type": "games",
+     "title": "Elden Ring",
+     "url": "/game/elden-ring/",
+     "platform": {
+      "id": 1500000128,
+      "name": "PlayStation 5"
+     },
+     "gameTaxonomy": {
+      "family": {
+       "id": 1200497664,
+       "name": "Elden Ring"
+      },
+      "title": {
+       "id": 1300501979,
+       "name": "Elden Ring"
+      },
+      "game": {
+       "id": 1400627895,
+       "name": "Elden Ring"
+      },
+      "platform": {
+       "id": 1500000128,
+       "name": "PlayStation 5"
+      }
+     }
+    },
+    "platform": "PlayStation 5"
+   },
+   {
+    "id": "d0c5792a-2db6-40d0-8f36-610fa08eee84",
+    "quote": "A landmark of [text removed]",
+    "score": 10,
+    "thumbsUp": null,
+    "thumbsDown": null,
+    "date": "2026-10-03",
+    "author": "user10",
+    "version": 1791064054805,
+    "spoiler": false,
+    "reviewedProduct": {
+     "id": 1400627895,
+     "type": "games",
+     "title": "Elden Ring",
+     "url": "/game/elden-ring/",
+     "platform": {
+      "id": 1500000128,
+      "name": "PlayStation 5"
+     },
+     "gameTaxonomy": {
+      "family": {
+       "id": 1200497664,
+       "name": "Elden Ring"
+      },
+      "title": {
+       "id": 1300501979,
+       "name": "Elden Ring"
+      },
+      "game": {
+       "id": 1400627895,
+       "name": "Elden Ring"
+      },
+      "platform": {
+       "id": 1500000128,
+       "name": "PlayStation 5"
+      }
+     }
+    },
+    "platform": "PlayStation 5"
+   },
+   {
+    "id": "8b4219a6-e2f0-4580-b464-c31079ed52b7",
+    "quote": "The biggest concern [text removed]",
+    "score": 9,
+    "thumbsUp": null,
+    "thumbsDown": null,
+    "date": "2026-10-01",
+    "author": "user11",
+    "version": 1790854211419,
+    "spoiler": false,
+    "reviewedProduct": {
+     "id": 1400627895,
+     "type": "games",
+     "title": "Elden Ring",
+     "url": "/game/elden-ring/",
+     "platform": {
+      "id": 1500000128,
+      "name": "PlayStation 5"
+     },
+     "gameTaxonomy": {
+      "family": {
+       "id": 1200497664,
+       "name": "Elden Ring"
+      },
+      "title": {
+       "id": 1300501979,
+       "name": "Elden Ring"
+      },
+      "game": {
+       "id": 1400627895,
+       "name": "Elden Ring"
+      },
+      "platform": {
+       "id": 1500000128,
+       "name": "PlayStation 5"
+      }
+     }
+    },
+    "platform": "PlayStation 5"
+   },
+   {
+    "id": "6b25992a-af7a-4ab2-9259-fad91c070c02",
+    "quote": "Liked it better [text removed]",
+    "score": 9,
+    "thumbsUp": null,
+    "thumbsDown": null,
+    "date": "2026-09-30",
+    "author": "user12",
+    "version": 1790786765963,
+    "spoiler": false,
+    "reviewedProduct": {
+     "id": 1400627895,
+     "type": "games",
+     "title": "Elden Ring",
+     "url": "/game/elden-ring/",
+     "platform": {
+      "id": 1500000128,
+      "name": "PlayStation 5"
+     },
+     "gameTaxonomy": {
+      "family": {
+       "id": 1200497664,
+       "name": "Elden Ring"
+      },
+      "title": {
+       "id": 1300501979,
+       "name": "Elden Ring"
+      },
+      "game": {
+       "id": 1400627895,
+       "name": "Elden Ring"
+      },
+      "platform": {
+       "id": 1500000128,
+       "name": "PlayStation 5"
+      }
+     }
+    },
+    "platform": "PlayStation 5"
+   },
+   {
+    "id": "f4332842-1fa5-499b-912b-5eb2d4188b85",
+    "quote": "Excellent. Un des [text removed]",
+    "score": 10,
+    "thumbsUp": null,
+    "thumbsDown": null,
+    "date": "2026-09-30",
+    "author": "user13",
+    "version": 1790773061823,
+    "spoiler": false,
+    "reviewedProduct": {
+     "id": 1400627895,
+     "type": "games",
+     "title": "Elden Ring",
+     "url": "/game/elden-ring/",
+     "platform": {
+      "id": 1500000128,
+      "name": "PlayStation 5"
+     },
+     "gameTaxonomy": {
+      "family": {
+       "id": 1200497664,
+       "name": "Elden Ring"
+      },
+      "title": {
+       "id": 1300501979,
+       "name": "Elden Ring"
+      },
+      "game": {
+       "id": 1400627895,
+       "name": "Elden Ring"
+      },
+      "platform": {
+       "id": 1500000128,
+       "name": "PlayStation 5"
+      }
+     }
+    },
+    "platform": "PlayStation 5"
+   },
+   {
+    "id": "d5851af6-2f94-4d5e-808b-7b491fd2acb2",
+    "quote": "Love it, love [text removed]",
+    "score": 9,
+    "thumbsUp": null,
+    "thumbsDown": null,
+    "date": "2026-09-27",
+    "author": "user14",
+    "version": 1790544394411,
+    "spoiler": false,
+    "reviewedProduct": {
+     "id": 1400627895,
+     "type": "games",
+     "title": "Elden Ring",
+     "url": "/game/elden-ring/",
+     "platform": {
+      "id": 1500000128,
+      "name": "PlayStation 5"
+     },
+     "gameTaxonomy": {
+      "family": {
+       "id": 1200497664,
+       "name": "Elden Ring"
+      },
+      "title": {
+       "id": 1300501979,
+       "name": "Elden Ring"
+      },
+      "game": {
+       "id": 1400627895,
+       "name": "Elden Ring"
+      },
+      "platform": {
+       "id": 1500000128,
+       "name": "PlayStation 5"
+      }
+     }
+    },
+    "platform": "PlayStation 5"
+   },
+   {
+    "id": "f6b53573-d56e-4d49-b3a9-2d2c55e8ef40",
+    "quote": "FromSoftware's magnum opus. [text removed]",
+    "score": 10,
+    "thumbsUp": null,
+    "thumbsDown": null,
+    "date": "2026-09-27",
+    "author": "user15",
+    "version": 1790528693942,
+    "spoiler": false,
+    "reviewedProduct": {
+     "id": 1400627895,
+     "type": "games",
+     "title": "Elden Ring",
+     "url": "/game/elden-ring/",
+     "platform": {
+      "id": 1500000128,
+      "name": "PlayStation 5"
+     },
+     "gameTaxonomy": {
+      "family": {
+       "id": 1200497664,
+       "name": "Elden Ring"
+      },
+      "title": {
+       "id": 1300501979,
+       "name": "Elden Ring"
+      },
+      "game": {
+       "id": 1400627895,
+       "name": "Elden Ring"
+      },
+      "platform": {
+       "id": 1500000128,
+       "name": "PlayStation 5"
+      }
+     }
+    },
+    "platform": "PlayStation 5"
+   },
+   {
+    "id": "8e5a02a3-d9e2-4703-9f36-6695cadc7b7b",
+    "quote": "Elden Ring is [text removed]",
+    "score": 7,
+    "thumbsUp": null,
+    "thumbsDown": null,
+    "date": "2026-08-17",
+    "author": "user16",
+    "version": 1790397583966,
+    "spoiler": false,
+    "reviewedProduct": {
+     "id": 1400627895,
+     "type": "games",
+     "title": "Elden Ring",
+     "url": "/game/elden-ring/",
+     "platform": {
+      "id": 1500000128,
+      "name": "PlayStation 5"
+     },
+     "gameTaxonomy": {
+      "family": {
+       "id": 1200497664,
+       "name": "Elden Ring"
+      },
+      "title": {
+       "id": 1300501979,
+       "name": "Elden Ring"
+      },
+      "game": {
+       "id": 1400627895,
+       "name": "Elden Ring"
+      },
+      "platform": {
+       "id": 1500000128,
+       "name": "PlayStation 5"
+      }
+     }
+    },
+    "platform": "PlayStation 5"
+   },
+   {
+    "id": "0c0679fb-3f03-407e-af84-d81c4435a2a9",
+    "quote": "Elden Ring 10/10! [text removed]",
+    "score": 10,
+    "thumbsUp": null,
+    "thumbsDown": null,
+    "date": "2026-09-26",
+    "author": "user17",
+    "version": 1790385926653,
+    "spoiler": false,
+    "reviewedProduct": {
+     "id": 1400627895,
+     "type": "games",
+     "title": "Elden Ring",
+     "url": "/game/elden-ring/",
+     "platform": {
+      "id": 1500000128,
+      "name": "PlayStation 5"
+     },
+     "gameTaxonomy": {
+      "family": {
+       "id": 1200497664,
+       "name": "Elden Ring"
+      },
+      "title": {
+       "id": 1300501979,
+       "name": "Elden Ring"
+      },
+      "game": {
+       "id": 1400627895,
+       "name": "Elden Ring"
+      },
+      "platform": {
+       "id": 1500000128,
+       "name": "PlayStation 5"
+      }
+     }
+    },
+    "platform": "PlayStation 5"
+   },
+   {
+    "id": "575291d5-2738-466e-bc93-974f9b08f3db",
+    "quote": "худший соулс. куча [text removed]",
+    "score": 4,
+    "thumbsUp": null,
+    "thumbsDown": null,
+    "date": "2026-09-26",
+    "author": "user18",
+    "version": 1790385914466,
+    "spoiler": false,
+    "reviewedProduct": {
+     "id": 1400627895,
+     "type": "games",
+     "title": "Elden Ring",
+     "url": "/game/elden-ring/",
+     "platform": {
+      "id": 1500000128,
+      "name": "PlayStation 5"
+     },
+     "gameTaxonomy": {
+      "family": {
+       "id": 1200497664,
+       "name": "Elden Ring"
+      },
+      "title": {
+       "id": 1300501979,
+       "name": "Elden Ring"
+      },
+      "game": {
+       "id": 1400627895,
+       "name": "Elden Ring"
+      },
+      "platform": {
+       "id": 1500000128,
+       "name": "PlayStation 5"
+      }
+     }
+    },
+    "platform": "PlayStation 5"
+   },
+   {
+    "id": "624bda4d-4c9a-42d6-83b9-18d5d7613c7f",
+    "quote": "The first soul [text removed]",
+    "score": 9,
+    "thumbsUp": null,
+    "thumbsDown": null,
+    "date": "2026-09-25",
+    "author": "user19",
+    "version": 1790363290360,
+    "spoiler": false,
+    "reviewedProduct": {
+     "id": 1400627895,
+     "type": "games",
+     "title": "Elden Ring",
+     "url": "/game/elden-ring/",
+     "platform": {
+      "id": 1500000128,
+      "name": "PlayStation 5"
+     },
+     "gameTaxonomy": {
+      "family": {
+       "id": 1200497664,
+       "name": "Elden Ring"
+      },
+      "title": {
+       "id": 1300501979,
+       "name": "Elden Ring"
+      },
+      "game": {
+       "id": 1400627895,
+       "name": "Elden Ring"
+      },
+      "platform": {
+       "id": 1500000128,
+       "name": "PlayStation 5"
+      }
+     }
+    },
+    "platform": "PlayStation 5"
+   },
+   {
+    "id": "64bedb03-9c27-40e7-aa04-04824db727b9",
+    "quote": "Almost perfect adventure [text removed]",
+    "score": 9,
+    "thumbsUp": null,
+    "thumbsDown": null,
+    "date": "2026-09-24",
+    "author": "user20",
+    "version": 1790264320499,
+    "spoiler": false,
+    "reviewedProduct": {
+     "id": 1400627895,
+     "type": "games",
+     "title": "Elden Ring",
+     "url": "/game/elden-ring/",
+     "platform": {
+      "id": 1500000128,
+      "name": "PlayStation 5"
+     },
+     "gameTaxonomy": {
+      "family": {
+       "id": 1200497664,
+       "name": "Elden Ring"
+      },
+      "title": {
+       "id": 1300501979,
+       "name": "Elden Ring"
+      },
+      "game": {
+       "id": 1400627895,
+       "name": "Elden Ring"
+      },
+      "platform": {
+       "id": 1500000128,
+       "name": "PlayStation 5"
+      }
+     }
+    },
+    "platform": "PlayStation 5"
+   }
+  ]
+ },
+ "links": {
+  "self": {
+   "href": "https://backend.metacritic.com/reviews/metacritic/user/games/elden-ring/web?offset=0&limit=50&sort=date&"
+  },
+  "prev": {
+   "href": null
+  },
+  "next": {
+   "href": "https://backend.metacritic.com/reviews/metacritic/user/games/elden-ring/web?offset=50&limit=50&sort=date&"
+  },
+  "first": {
+   "href": "https://backend.metacritic.com/reviews/metacritic/user/games/elden-ring/web?offset=0&limit=50&sort=date&"
+  },
+  "last": {
+   "href": "https://backend.metacritic.com/reviews/metacritic/user/games/elden-ring/web?offset=6600&limit=50&sort=date&"
+  },
+  "filterOptions": [
+   {
+    "label": "All Reviews",
+    "value": "all",
+    "href": "https://backend.metacritic.com/reviews/metacritic/user/games/elden-ring/web?offset=0&limit=50&sort=date&filterBySentiment=all"
+   },
+   {
+    "label": "Positive Reviews",
+    "value": "positive",
+    "href": "https://backend.metacritic.com/reviews/metacritic/user/games/elden-ring/web?offset=0&limit=50&sort=date&filterBySentiment=positive"
+   },
+   {
+    "label": "Mixed Reviews",
+    "value": "neutral",
+    "href": "https://backend.metacritic.com/reviews/metacritic/user/games/elden-ring/web?offset=0&limit=50&sort=date&filterBySentiment=neutral"
+   },
+   {
+    "label": "Negative Reviews",
+    "value": "negative",
+    "href": "https://backend.metacritic.com/reviews/metacritic/user/games/elden-ring/web?offset=0&limit=50&sort=date&filterBySentiment=negative"
+   }
+  ],
+  "sortOptions": [
+   {
+    "label": "Recently Added",
+    "value": "date",
+    "href": "https://backend.metacritic.com/reviews/metacritic/user/games/elden-ring/web?offset=0&limit=50&sort=date&"
+   },
+   {
+    "label": "Score",
+    "value": "score",
+    "href": "https://backend.metacritic.com/reviews/metacritic/user/games/elden-ring/web?offset=0&limit=50&sort=score&"
+   }
+  ]
+ },
+ "meta": {
+  "componentName": null,
+  "componentDisplayName": null,
+  "componentType": null
+ }
+}

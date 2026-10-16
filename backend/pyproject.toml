@@ -1,0 +1,17 @@
+[project]
+name = "gameanalytics"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = ["live: hits the real Metacritic API (run with GA_LIVE=1)"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+# B008: FastAPI's Depends/Query defaults are idiomatic. RUF012: arq reads WorkerSettings class attributes.
+ignore = ["B008", "RUF012"]
