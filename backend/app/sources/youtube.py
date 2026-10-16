@@ -19,7 +19,10 @@ SILENT = re.compile(r"no[\s-]*(?:commentary|talking|voice)|without commentary|si
                     r"без\s+комментари|без\s+слов", re.IGNORECASE)
 SKIP_WORDS = re.compile(r"\b(trailer|teaser|reveal|soundtrack|ost|review|reaction|shorts|livestream)\b", re.IGNORECASE)
 LETS_PLAY = re.compile(r"walkthrough|let'?s\s*play|playthrough|gameplay|\bpart\s*\d|\bep(?:isode)?\.?\s*\d|full\s*game|"
-                       r"\bblind\b|\bstream\b|прохождени|летсплей|часть\s*\d", re.IGNORECASE)
+                       r"\bblind\b|прохождени|летсплей|часть\s*\d", re.IGNORECASE)
+# Streams talk to the chat more than about the game: mixed content, of no use to us even when they show play.
+STREAM = re.compile(r"\b(live\s*stream|livestream|stream|streaming|streamed|vod|twitch|kick\.com|live)\b|стрим|трансляц|"
+                    r"🔴|\[live\]|\(live\)", re.IGNORECASE)
 DEMO = re.compile(r"\b(demo|prologue|playtest|beta|alpha)\b|демо", re.IGNORECASE)
 STOP = {"the", "of", "a", "an", "and", "edition", "remastered", "remake", "deluxe", "complete", "definitive", "gold",
         "ultimate", "collection", "bundle", "goty", "director", "directors", "cut", "enhanced"}
@@ -40,6 +43,7 @@ class Video:
     duration_s: int
     description: str = ""
     chapters: list[tuple[int, str]] = field(default_factory=list)
+    was_live: bool = False  # a recorded live broadcast: YouTube keeps liveStreamingDetails on the archive
 
     @property
     def url(self) -> str:
@@ -123,8 +127,10 @@ def why_not(game_title: str, v: Video, *, min_views: int, max_s: int, released: 
     """Why a video is not a let's play of this game worth watching, or None when it is."""
     if not title_matches(game_title, v.title):
         return "другая игра или не то название"
+    if v.was_live or STREAM.search(v.title):
+        return "запись стрима"
     if SKIP_WORDS.search(v.title):
-        return "трейлер, обзор или стрим"
+        return "трейлер или обзор"
     if released and DEMO.search(v.title):
         return "демо, игра уже вышла"
     if v.duration_s < MIN_VIDEO_S:
@@ -216,7 +222,8 @@ class YouTube:
         ids = list(dict.fromkeys(ids))[:50]  # videos.list takes up to 50 ids
         if not ids:
             return []
-        details = await self._get("/videos", {"part": "snippet,statistics,contentDetails", "id": ",".join(ids)})
+        details = await self._get("/videos", {"part": "snippet,statistics,contentDetails,liveStreamingDetails",
+                                              "id": ",".join(ids)})
         out = []
         for i in details.get("items", []):
             sn, st, cd = i["snippet"], i.get("statistics", {}), i.get("contentDetails", {})
@@ -226,5 +233,5 @@ class YouTube:
             desc = sn.get("description", "")
             out.append(Video(id=i["id"], title=sn.get("title", ""), channel=sn.get("channelTitle", ""),
                              views=int(st.get("viewCount", 0)), duration_s=dur, description=desc,
-                             chapters=parse_chapters(desc, dur)))
+                             chapters=parse_chapters(desc, dur), was_live="liveStreamingDetails" in i))
         return out

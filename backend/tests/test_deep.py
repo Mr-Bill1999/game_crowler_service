@@ -113,7 +113,17 @@ def test_silence_is_read_from_title_and_description():
 
 def test_a_titled_lets_play_beats_an_essay_with_more_views():
     essay = vid("Marvel's Wolverine Is More of a Good Thing", views=239_000, minutes=21)
-    stream = vid("STREAM ENDS WHEN I BEAT MARVEL'S WOLVERINE", views=4_400, minutes=674)
     silent = vid("Marvel's Wolverine Full Walkthrough No Commentary", views=6_600, minutes=248)
-    assert pick([essay, stream, silent]) is stream
+    assert pick([essay, silent]) is silent
     assert pick([essay]) is essay  # an essay is still better than nothing
+
+
+def test_streams_are_never_taken():
+    titled = vid("STREAM ENDS WHEN I BEAT MARVEL'S WOLVERINE", views=40_000, minutes=300)
+    red = vid("🔴 Marvel's Wolverine Let's Play Part 1", views=40_000)
+    archived = vid("Marvel's Wolverine Walkthrough Part 1", views=90_000, was_live=True)  # a broadcast, quietly titled
+    russian = vid("Marvel's Wolverine стрим прохождение", views=90_000)
+    assert pick([titled, red, archived, russian]) is None
+    assert not pick([vid("Marvel's Wolverine Livestream recap", views=5000)])
+    walkthrough = vid("Marvel's Wolverine Walkthrough Part 1", views=5_000)
+    assert pick([titled, archived, walkthrough]) is walkthrough
