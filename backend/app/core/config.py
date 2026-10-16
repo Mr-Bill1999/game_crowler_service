@@ -1,6 +1,8 @@
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -73,6 +75,18 @@ class Settings(BaseSettings):
     llm_safety: float = 0.8
     service_reserve_tokens: int = 190_000  # peak day of review analyses + light essence of ~100 new games + 25% retries
     quota_tz: str = "America/Los_Angeles"  # Google resets free quotas at midnight Pacific
+
+    # Test stand: replayable external calls and a frozen clock (see stand/README.md)
+    tape_mode: str = "live"  # live | record | replay | auto (replay what is recorded, record the rest)
+    tape_dir: Path = Path(__file__).parents[2] / "tapes"
+    frozen_now: datetime | None = None  # ISO 8601 with offset; None = real time
+    cron_enabled: bool = True  # the stand runs cycles on command, not on the clock
+
+    @field_validator("frozen_now", "gemini_api_key", "youtube_api_key", mode="before")
+    @classmethod
+    def _empty_is_unset(cls, v):
+        """Compose passes unset variables as empty strings: treat them as not given."""
+        return None if v == "" else v
 
     # Event bus
     events_stream: str = "ga:events"

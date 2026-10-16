@@ -5,11 +5,13 @@ import json
 import random
 import re
 import time
+from dataclasses import asdict
 
 from google import genai
 from google.genai import errors, types
 
 from app.ai.base import LLMResult
+from app.core import tape
 
 # USD per 1M tokens: standard input, standard output, batch input, batch output.
 # ai.google.dev/gemini-api/docs/pricing on 15.10.2026. Output includes thinking tokens.
@@ -87,6 +89,20 @@ class GeminiProvider:
                             max_output_tokens: int = 16384, media_resolution: str | None = None) -> LLMResult:
         """`prompt` is text, or parts mixing text and media (YouTube clips for deep analyze)."""
         model = model or self.default_model
+        request = {"model": model, "system": system, "schema": schema, "thinking": thinking_level,
+                   "max_output_tokens": max_output_tokens, "media_resolution": media_resolution,
+                   "prompt": prompt if isinstance(prompt, str)
+                   else [p.model_dump(mode="json", exclude_none=True) for p in prompt]}
+        return await tape.call(
+            "gemini", request,
+            lambda: self._generate_json_live(system=system, prompt=prompt, schema=schema, model=model,
+                                             thinking_level=thinking_level, max_output_tokens=max_output_tokens,
+                                             media_resolution=media_resolution),
+            encode=asdict, decode=lambda d: LLMResult(**d), summary=f"{model} {system[:60]}")
+
+    async def _generate_json_live(self, *, system: str, prompt: str | list[types.Part], schema: dict, model: str,
+                                  thinking_level: str | None, max_output_tokens: int,
+                                  media_resolution: str | None) -> LLMResult:
         if isinstance(prompt, list):
             prompt = types.Content(role="user", parts=prompt)
         config = types.GenerateContentConfig(
@@ -123,6 +139,10 @@ class GeminiProvider:
     async def embed(self, texts: list[str], *, model: str, dim: int) -> list[list[float]]:
         """One vector per text. Each text is its own Content: gemini-embedding-2 merges a plain list of strings into
         a single vector. Per-minute 429s are waited out; a daily one (retry in hours) is raised to the caller."""
+        return await tape.call("gemini-embed", {"model": model, "dim": dim, "texts": texts},
+                               lambda: self._embed_live(texts, model=model, dim=dim), summary=f"{model} x{len(texts)}")
+
+    async def _embed_live(self, texts: list[str], *, model: str, dim: int) -> list[list[float]]:
         contents = [types.Content(parts=[types.Part(text=t)]) for t in texts]
         config = types.EmbedContentConfig(task_type="SEMANTIC_SIMILARITY", output_dimensionality=dim)
         for attempt in range(1, self.max_attempts + 1):

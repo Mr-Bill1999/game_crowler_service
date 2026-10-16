@@ -15,3 +15,7 @@ research/*.out
 research/nr_watch/
 research/catalog_watch/
 .claude/settings.local.json
+# test stand: recorded external answers and the database snapshot stay local
+stand/tapes/
+stand/seed/
+backend/tapes/

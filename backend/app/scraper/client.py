@@ -7,6 +7,7 @@ from typing import Any
 
 import httpx
 
+from app.core import tape
 from app.core.config import Settings
 from app.events.bus import EventBus
 
@@ -53,6 +54,14 @@ class MCClient:
 
     async def get_json(self, stage: str, path: str, params: dict[str, Any] | None = None,
                        slug: str | None = None) -> dict:
+        async def on_hit() -> None:
+            await self.bus.emit(stage, "ok", slug=slug, http=200, ms=0, cache="tape")
+
+        return await tape.call("metacritic", {"path": path, "params": params or {}},
+                               lambda: self._get_json_live(stage, path, params, slug), summary=path, on_hit=on_hit)
+
+    async def _get_json_live(self, stage: str, path: str, params: dict[str, Any] | None,
+                             slug: str | None) -> dict:
         last_status: int | None = None
         for attempt in range(1, self.s.max_attempts + 1):
             await self.limiter.acquire()

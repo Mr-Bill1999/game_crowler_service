@@ -6,7 +6,7 @@ its title, genres or description change. Vectors follow the essence; they are sp
 """
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +22,7 @@ from app.ai.light_essence import (
     source_hash,
     texts,
 )
+from app.core import clock
 from app.core.config import Settings
 from app.events.bus import EventBus
 from app.models import FACET_DIM, Game, GameFacets
@@ -57,7 +58,7 @@ async def build_essences(provider: GeminiProvider, games: list[Game], s: Setting
             row = await session.get(GameFacets, g.id) or GameFacets(game_id=g.id)
             row.essence, row.tags, row.series = e, flat_tags(e), (e.get("series") or "").strip()[:200] or None
             row.confidence, row.source_hash, row.model = e.get("confidence"), source_hash(g), r.model
-            row.tokens_in, row.tokens_out, row.essence_at = r.tokens_in, r.tokens_out, datetime.now(UTC)
+            row.tokens_in, row.tokens_out, row.essence_at = r.tokens_in, r.tokens_out, clock.now()
             session.add(row)
             await session.commit()
         stats["ok"] += 1
@@ -78,7 +79,7 @@ async def embed_pending(provider: GeminiProvider, s: Settings, sessions, bus: Ev
         pending = (await session.execute(
             select(GameFacets, Game.title).join(Game, Game.id == GameFacets.game_id)
             .where((GameFacets.embed_hash.is_(None)) | (GameFacets.embed_hash != GameFacets.source_hash))
-            .order_by(GameFacets.essence_at))).all()
+            .order_by(GameFacets.essence_at, GameFacets.game_id))).all()  # stable batches on a frozen clock
     room = max(0, s.embed_daily_texts - used) // len(FACETS)
     todo, waiting = pending[:room], len(pending) - min(room, len(pending))
     per_batch = max(1, s.embed_batch // len(FACETS))
@@ -94,7 +95,7 @@ async def embed_pending(provider: GeminiProvider, s: Settings, sessions, bus: Ev
             await bus.emit("facets.embed", "error", done=done, error=f"{type(e).__name__}: {e}"[:300])
             waiting += len(todo) - i
             break
-        stamp = datetime.now(UTC)
+        stamp = clock.now()
         async with sessions() as session:
             for k, (f, _) in enumerate(batch):
                 row = await session.get(GameFacets, f.game_id)

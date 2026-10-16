@@ -2,13 +2,14 @@
 
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.ai.selection import SUBSTANTIVE_WORDS
+from app.core import clock
 from app.core.config import Settings
 from app.events.bus import EventBus
 from app.models import Game, GamePlatform, RawResponse, Review
@@ -110,7 +111,7 @@ async def ingest_game(d: Deps, slug: str, source: str | None = None, force_full:
     s = d.settings
     raw = await d.mc.composer(slug)
     card = parse_composer(raw, s.mc_image_base)
-    now = datetime.now(UTC)
+    now = clock.now()
 
     async with d.sessions() as session:
         game = await session.get(Game, card.id)

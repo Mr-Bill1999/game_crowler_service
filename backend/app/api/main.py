@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Literal
 
 from arq import create_pool
@@ -11,6 +11,7 @@ from redis.asyncio import Redis
 from sqlalchemy import and_, desc, func, nulls_last, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import clock
 from app.core.config import get_settings
 from app.core.db import SessionLocal, init_db
 from app.models import (
@@ -107,7 +108,7 @@ async def list_games(
 @app.get("/api/top")
 async def top_by_day(day: date | None = None, session: AsyncSession = Depends(db)):
     """The "New Releases" block as last seen on `day` (UTC); today by default."""
-    day = day or datetime.now(UTC).date()
+    day = day or clock.now().date()
     rows = (await session.execute(select(TopRelease, Game).join(Game, Game.id == TopRelease.game_id)
                                   .where(TopRelease.day == day).order_by(TopRelease.rank))).all()
     return {"day": day, "observed_at": rows[0][0].observed_at if rows else None,
@@ -201,13 +202,13 @@ def client_id(request: Request) -> str:
 
 @app.get("/api/deep/quota")
 async def deep_quota_status(request: Request, session: AsyncSession = Depends(db)):
-    return (await deep_quota(session, settings, client_id(request), datetime.now(UTC))).as_dict()
+    return (await deep_quota(session, settings, client_id(request), clock.now())).as_dict()
 
 
 @app.post("/api/games/{slug}/deep-analyze", status_code=202)
 async def start_deep(slug: str, request: Request, session: AsyncSession = Depends(db)):
     g = await _game_or_404(session, slug)
-    now = datetime.now(UTC)
+    now = clock.now()
     # One analysis per game serves everyone: a pending or recent one is returned and costs no quota.
     existing = await session.scalar(
         select(DeepAnalysis).where(
@@ -252,7 +253,7 @@ async def runs(limit: int = 20, session: AsyncSession = Depends(db)):
 @app.get("/api/pipeline/stats")
 async def pipeline_stats(request: Request, session: AsyncSession = Depends(db)):
     tiers = dict((await session.execute(select(Game.tier, func.count()).group_by(Game.tier))).all())
-    now = datetime.now(UTC)
+    now = clock.now()
     due_hour = await session.scalar(select(func.count()).select_from(Game).where(
         Game.next_refresh_at <= now + timedelta(hours=1), Game.archived_at.is_(None)))
     reviews = dict((await session.execute(select(Review.kind, func.count()).group_by(Review.kind))).all())

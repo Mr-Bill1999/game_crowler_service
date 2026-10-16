@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 
 import httpx
 
+from app.core import tape
+
 API = "https://www.googleapis.com/youtube/v3"
 SEARCH_RESULTS = 15
 MIN_VIDEO_S = 10 * 60
@@ -133,6 +135,10 @@ class YouTube:
         await self.http.aclose()
 
     async def _get(self, path: str, params: dict) -> dict:
+        return await tape.call("youtube", {"path": path, "params": params}, lambda: self._get_live(path, params),
+                               summary=f"{path} {params.get('q') or params.get('id', '')}"[:200])
+
+    async def _get_live(self, path: str, params: dict) -> dict:
         try:
             r = await self.http.get(path, params=params)
         except httpx.HTTPError as e:

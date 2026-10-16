@@ -15,6 +15,7 @@ from app.ai.analyze import essence, load_reviews
 from app.ai.deep import absolute_facts, run_deep
 from app.ai.gemini import GeminiProvider
 from app.ai.lifecycle import analyze_kind, latest_analyses, metacritic_user_summary
+from app.core import clock
 from app.core.config import get_settings
 from app.core.db import SessionLocal, init_db
 from app.events.bus import EventBus, current_run_id
@@ -121,7 +122,7 @@ async def run_bootstrap(ctx: dict, days: int | None = None) -> dict:
     async def work(d: Deps) -> dict:
         window = days or d.settings.bootstrap_days
         async with d.sessions() as session:
-            items = await discover_bootstrap(d.mc, session, d.settings, d.bus, datetime.now(UTC).date(), window)
+            items = await discover_bootstrap(d.mc, session, d.settings, d.bus, clock.now().date(), window)
         return {"window_days": window, **await _ingest_many(ctx, [(i.slug, "new_releases") for i in items])}
 
     return await _run(ctx, "bootstrap", work)
@@ -132,7 +133,7 @@ async def run_hourly(ctx: dict) -> dict:
     (2) the catalog and New Releases windows of the last three days; (3) games whose refresh is due."""
 
     async def work(d: Deps) -> dict:
-        now = datetime.now(UTC)
+        now = clock.now()
         top = await d.mc.new_releases_top()
         top_stats = await _ingest_many(ctx, [(i.slug, "new_releases") for i in top])
         async with d.sessions() as session:
@@ -162,7 +163,7 @@ async def run_hourly(ctx: dict) -> dict:
 async def run_sweep(ctx: dict) -> dict:
     async def work(d: Deps) -> dict:
         async with d.sessions() as session:
-            items = await discover_sweep(d.mc, session, d.settings, d.bus, datetime.now(UTC).date())
+            items = await discover_sweep(d.mc, session, d.settings, d.bus, clock.now().date())
         return await _ingest_many(ctx, [(i.slug, "catalog") for i in items])
 
     return await _run(ctx, "sweep", work)
@@ -198,7 +199,7 @@ async def analyze_game(ctx: dict, game_id: int, run_id: str | None = None) -> No
         latest = {k: (by_kind[k].data or (prev[k].payload if k in prev else None)) for k in ("critic", "user")}
         ess = await essence(provider, game, latest["critic"], latest["user"], s.llm_model, s.llm_thinking_level)
 
-    now = datetime.now(UTC)
+    now = clock.now()
     async with d.sessions() as session:
         game = await session.get(Game, game_id)
         for r in runs:
@@ -241,7 +242,7 @@ async def update_facets(ctx: dict) -> dict:
     async with d.sessions() as session:
         games = await stale_games(session, s.facets_per_run)
     essence = await build_essences(provider, games, s, d.sessions, d.bus) if games else {"ok": 0}
-    embed = await embed_pending(provider, s, d.sessions, d.bus, datetime.now(UTC))
+    embed = await embed_pending(provider, s, d.sessions, d.bus, clock.now())
     stats = {"essence": essence, **embed}
     async with d.sessions() as session:
         empty = await session.scalar(select(SimilarGame.game_id).limit(1)) is None
@@ -333,7 +334,7 @@ class WorkerSettings:
     cron_jobs = [
         cron(run_hourly, minute=0, timeout=RUN_TIMEOUT, unique=True, job_id="cron:hourly"),
         cron(run_sweep, hour=4, minute=30, timeout=RUN_TIMEOUT, unique=True, job_id="cron:sweep"),
-    ]
+    ] if _s.cron_enabled else []  # the stand runs cycles on command, on its frozen clock
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(_s.redis_url)
