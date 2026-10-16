@@ -81,6 +81,32 @@ cd frontend && npm install && npm run dev
 docker compose up -d --build
 ```
 
+Продакшен — один VPS, Ubuntu 24.04, http://your-server. Используются [deploy/compose.yml](deploy/compose.yml) и
+[deploy/deploy.sh](deploy/deploy.sh). Вход на сервер только по SSH-ключу `~/.ssh/ga_deploy`, пароль не используется.
+- **Порты.** Снаружи открыт только 80-й, у nginx; Postgres, Redis и API закрыты внутри.
+- **Секреты.** Ключи и случайный пароль базы лежат в `/opt/gameanalytics/deploy/.env` с правами 600, в git их нет.
+- **Время.** Протокол точного времени у провайдера закрыт, часы сервера держит htpdate по HTTPS.
+
+Выкатить текущий коммит, посмотреть состояние, логи, сделать бэкап:
+
+```bash
+deploy/deploy.sh up
+```
+
+```bash
+deploy/deploy.sh status
+```
+
+```bash
+deploy/deploy.sh logs worker
+```
+
+```bash
+deploy/deploy.sh backup
+```
+
+Локально воркер при этом не запускают: ключ Gemini общий.
+
 Ручные команды:
 
 ```bash
