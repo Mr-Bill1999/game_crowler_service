@@ -23,3 +23,6 @@ backend/tapes/
 deploy/.env
 deploy/backups/
 deploy/.host
+# local tooling and generated outputs
+.claude/
+research/*.jsonl

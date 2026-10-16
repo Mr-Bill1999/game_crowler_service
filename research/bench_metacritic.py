@@ -2,7 +2,12 @@
 
 usage: bench.py <source: new_releases|catalog> <concurrency> [n=20] [page_limit=500]
 """
-import asyncio, json, sys, time, statistics
+import asyncio
+import json
+import statistics
+import sys
+import time
+
 import httpx
 
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36"
@@ -51,7 +56,7 @@ async def reviews(c, kind, slug):
 
 async def card(c, slug):
     t = time.perf_counter()
-    comp, crit, usr = await asyncio.gather(
+    _comp, crit, usr = await asyncio.gather(
         get(c, "composer", f"{B}/composer/metacritic/pages/games/{slug}/web"),
         reviews(c, "critic", slug),
         reviews(c, "user", slug),

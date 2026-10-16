@@ -1,6 +1,6 @@
 """Token economics of the analysis lifecycle, replayed hour by hour on real review dates from the database.
 
-  cd backend && .venv/bin/python -m eval.economics [--start 2026-09-15] [--end 2026-10-15] [--out economics.json]
+  cd backend && .venv/bin/python -m eval.economics [--start 2026-09-15] [--end 2026-10-15] [--out eval/results/economics.json]
 
 Each game is polled on the schedule of its tier (app.pipeline.tiers.compute_tier). At every poll the analysis
 trigger (app.pipeline.tiers.needs_analysis) decides whether to run the three LLM tasks. Reviews of a given date
@@ -209,7 +209,7 @@ async def main() -> None:
     ap.add_argument("--start", type=date.fromisoformat, default=date(2026, 9, 15))
     ap.add_argument("--end", type=date.fromisoformat, default=date(2026, 10, 14))
     ap.add_argument("--steady-days", type=int, default=14)
-    ap.add_argument("--out", default="eval/economics.json")
+    ap.add_argument("--out", default="eval/results/economics.json")
     a = ap.parse_args()
     s = Settings()
     series = await load_series(a.start)

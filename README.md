@@ -5,8 +5,52 @@
 подбираются похожие игры. По кнопке «Deep analyze» модель смотрит отрезки популярного летсплея на YouTube и
 выделяет факты, которых нет в описании магазина.
 
-Состояние на 16.10.2026: MVP собран и проверен на стенде. Пройдены фаза 1 (намеренные поломки) и фаза 2
-(проверка качества на готовых ответах). Следующий этап — деплой. Всё работает на бесплатных ключах Google.
+Состояние на 16.10.2026: MVP собран, проверен на стенде и развёрнут на VPS. Пройдены фаза 1 (намеренные
+поломки) и фаза 2 (проверка качества на готовых ответах). Всё работает на бесплатных ключах Google.
+
+## Для проверяющих
+
+**С чего начать в коде**
+
+| Что | Где |
+|---|---|
+| Часовой цикл, задачи воркера, восстановление после сбоев | [backend/app/pipeline/tasks.py](backend/app/pipeline/tasks.py) |
+| Поиск новых игр окнами по дате | [backend/app/pipeline/discovery.py](backend/app/pipeline/discovery.py) |
+| Сводки отзывов: выборка, обновления, проверки после модели | [backend/app/ai/lifecycle.py](backend/app/ai/lifecycle.py), [selection.py](backend/app/ai/selection.py), [checks.py](backend/app/ai/checks.py) |
+| Похожие игры | [backend/app/pipeline/similarity.py](backend/app/pipeline/similarity.py), [backend/app/ai/light_essence.py](backend/app/ai/light_essence.py) |
+| Deep analyze: поиск и выбор видео, разбор моделью | [backend/app/sources/youtube.py](backend/app/sources/youtube.py), [backend/app/ai/deep.py](backend/app/ai/deep.py) |
+| Квота бесплатного ключа | [backend/app/pipeline/quota.py](backend/app/pipeline/quota.py) |
+| Записи ответов, сбои, замороженные часы для стенда | [backend/app/core/tape.py](backend/app/core/tape.py), [faults.py](backend/app/core/faults.py), [clock.py](backend/app/core/clock.py) |
+| API | [backend/app/api/main.py](backend/app/api/main.py) |
+
+**Откуда взяты решения и цифры**
+- [docs/model-comparison.html](docs/model-comparison.html) — слепое сравнение моделей.
+- [docs/token-economics.html](docs/token-economics.html) — расход токенов по стратегиям чтения отзывов.
+- [docs/similarity-experiment.md](docs/similarity-experiment.md) — слепой эксперимент по похожим играм.
+- [docs/quality-mvp.md](docs/quality-mvp.md) — проверка качества на готовых ответах.
+- [stand/FINDINGS.md](stand/FINDINGS.md) — 16 поломок, найденных на стенде, и их регрессионные проверки.
+
+**Как проверить без ключей и без сети**
+
+Модульные тесты не ходят ни в Metacritic, ни в Gemini:
+
+```bash
+cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt && .venv/bin/pytest
+```
+
+Интеграционные тесты запускаются на настоящем Postgres из `docker-compose.yml`:
+
+```bash
+docker compose up -d postgres && docker compose exec postgres createdb -U ga ga_test
+```
+
+```bash
+cd backend && GA_TEST_DATABASE_URL=postgresql+asyncpg://ga:ga@localhost:5432/ga_test .venv/bin/pytest tests/integration
+```
+
+Сценарии поломок на стенде (`stand/chaos.py`) воспроизводят записанные ответы внешних сервисов. Записи содержат
+данные Metacritic и ответы модели, поэтому в репозиторий не входят: для запуска их нужно записать своими ключами
+(`stand/stand.sh record`, см. [stand/README.md](stand/README.md)).
 
 ---
 
@@ -379,7 +423,7 @@ flowchart TD
   - разбивка на грани и теги вдвое снижает «хабы» — игры, которые попадают в рекомендации почти ко всему;
   - жанр Metacritic как сигнал ухудшал любую смесь и в формулу не вошёл.
 
-  Подробно: [eval/results/similarity-v1/report.md](backend/eval/results/similarity-v1/report.md) (локально) и
+  Подробно: [docs/similarity-experiment.md](docs/similarity-experiment.md) и
   [docs/quality-mvp.md](docs/quality-mvp.md).
 - **Векторы центрируются,** то есть из каждого вычитается средний по каталогу. Иначе косинусы коротких русских
   текстов все около 0.8 и ничего не различают.
@@ -711,12 +755,11 @@ docs/                    дизайн-документ, сравнение мо�
 
 ## Документы и исследования
 
-- [docs/architecture.html](docs/architecture.html) — дизайн-документ v0.6. Опубликован как артефакт; этот README
-  новее и описывает и стенд, и правки после проверки качества.
 - [docs/model-comparison.html](docs/model-comparison.html) — слепое сравнение моделей.
 - [docs/token-economics.html](docs/token-economics.html) — расход токенов по стратегиям чтения.
+- [docs/similarity-experiment.md](docs/similarity-experiment.md) — слепой эксперимент по похожим играм.
 - [docs/quality-mvp.md](docs/quality-mvp.md) — проверка качества сводок, похожих игр и Deep analyze.
 - [stand/FINDINGS.md](stand/FINDINGS.md) — 16 найденных и исправленных поломок.
 - [stand/README.md](stand/README.md) — как пользоваться стендом.
 - `backend/eval/` — скрипты экспериментов; результаты в `backend/eval/results/` (локально, не в git).
-- `research/` — наблюдатели топ-20 и каталога Metacritic, замеры скорости.
+- `research/` — наблюдатели топ-20 и каталога Metacritic, замер скорости сбора карточек.
