@@ -51,4 +51,4 @@ backend/.venv/bin/python stand/load.py --users 50 --seconds 30 --sse 30
 GA_TEST_DATABASE_URL=postgresql+asyncpg://ga:ga@localhost:5433/ga_test backend/.venv/bin/python -m pytest backend/tests/integration
 ```
 
-Findings of phase 1 and their regression checks: [FINDINGS.md](FINDINGS.md).
+Findings and their regression checks: [FINDINGS.md](FINDINGS.md).

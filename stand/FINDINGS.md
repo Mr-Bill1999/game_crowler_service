@@ -1,6 +1,6 @@
-# Phase 1: breaking the service — findings
+# Reliability findings
 
-Stand `ga-stand`, 16.10.2026. Every finding was fixed and has a regression check:
+Found by breaking the service on the test stand `ga-stand`. Every finding was fixed and has a regression check:
 `backend/tests` (unit), `backend/tests/integration` (real Postgres, `GA_TEST_DATABASE_URL`),
 `stand/chaos.py` (whole pipeline on the stand), `stand/load.py` (API under load).
 
@@ -15,7 +15,7 @@ Stand `ga-stand`, 16.10.2026. Every finding was fixed and has a regression check
 | 7 | a Deep analyze that failed on Gemini's side still used the user's daily slot | failed analyses are free (`failed`), the user can retry | covered by quota statuses |
 | 8 | a worker killed mid-cycle left the run "running" forever | the worker closes its own lost runs at startup; CLI runs only after the job timeout | integration `test_a_restarted_worker...`, chaos `worker_killed` |
 | 9 | Deep analyses left queued by a killed worker or a lost queue held a pool slot all day | pending for 30 min → `lost` (free); if Redis is down at enqueue time the API answers 503 and frees the slot | integration `test_lost_deep_analyses...`, `test_deep_analyze_with_the_queue_down...`, chaos `redis_down` |
-| 10 | containers did not come back after a Docker or host restart (the outage of 15.10) | `restart: unless-stopped` on every service | `docker inspect` on the stand |
+| 10 | containers did not come back after a Docker or host restart | `restart: unless-stopped` on every service | `docker inspect` on the stand |
 | 11 | the DevPanel event stream dropped into a reconnect loop when Redis was unreachable | the stream stays open with keepalives and resumes when Redis is back | manual on the stand: Redis off → on in one connection |
 | 12 | `limit=-1`, `offset=-5`, `history=-1` answered 500 | bounds on every list parameter → 422 | integration `test_list_parameters_out_of_range...` |
 | 13 | search treated `%` and `_` as wildcards: `q=%` returned every game | LIKE wildcards are escaped, query capped at 200 chars | integration `test_search_text_is_text_not_a_pattern` |
@@ -38,7 +38,7 @@ Through nginx on the stand, generators on the same Mac (they share its cores wit
 | 4 | 200 | 0 | ~446 | ~300 ms | 1.3–1.4 s | 0 |
 
 One process tops out near 350 req/s; the number of processes is `GA_API_WORKERS` (default 2).
-Far beyond what the MVP needs; size the server in phase 3.
+Far beyond what the service needs.
 
 ## Not covered yet
 
