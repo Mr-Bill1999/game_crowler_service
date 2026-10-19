@@ -6,6 +6,7 @@ import { tagLabel } from "../tags";
 import { Score, TierPill } from "../components/Score";
 import { Cover } from "../components/Cover";
 import { Icon } from "../components/Icon";
+import { ProfileBlock } from "../components/ProfileBlock";
 
 export function GameCard() {
   const { slug = "" } = useParams();
@@ -84,6 +85,7 @@ export function GameCard() {
       )}
 
       <AnalysisBlock g={g} />
+      <ProfileBlock g={g} />
       <DeepBlock g={g} />
       <ReviewsBlock g={g} />
 

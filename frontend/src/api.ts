@@ -54,6 +54,29 @@ export type LightEssence = {
   confidence: "low" | "medium" | "high";
 };
 
+export type ProfileFactor = {
+  summary: string;
+  points: { text: string; evidence: number[] }[];
+  confidence: "high" | "medium" | "low";
+};
+
+export type GameProfile = {
+  fullness: number;
+  band: "thin" | "partial" | "enough" | "rich";
+  band_label: string;
+  threshold: number;
+  factors: Record<string, { score: number; kinds: string[] }>;
+  sources: Record<string, { documents: number; evidence: number }>;
+  evidence_count: number;
+  steam: { appid: string; url: string; reviews: { total_reviews: number | null } | null; tags: string[] | null } | null;
+  missing: string[];
+  profile: Record<string, ProfileFactor> | null;
+  model: string | null;
+  profiled_at: string | null;
+  enriched_at: string | null;
+  evidence: Record<string, { claim: string; source: string; polarity: string; is_claim: boolean; urls: string[] }>;
+};
+
 export type GameDetail = GameBrief & {
   description: string | null;
   publisher: string | null;
@@ -64,6 +87,7 @@ export type GameDetail = GameBrief & {
   analysis: Partial<Record<"critic" | "user" | "essence", { payload: unknown; model: string; created_at: string }>>;
   similar: { method: "essence" | "genre" | "none"; items: SimilarItem[]; series: SimilarItem[] };
   light_essence: LightEssence | null;
+  profile: GameProfile | null;
   deep: {
     id: number;
     status: string;
