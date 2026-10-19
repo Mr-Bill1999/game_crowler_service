@@ -224,3 +224,94 @@ class TopRelease(Base):
     game_id: Mapped[int] = mapped_column(ForeignKey("games.id", ondelete="CASCADE"))
     metascore: Mapped[int | None] = mapped_column(Integer)
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+# ---------- Game profile: six factors built from texts of several platforms (docs/game-profile.md) ----------
+
+
+class GameLink(Base):
+    """The same game on another platform: Steam app id today. How it was found is kept, so a wrong link can be told
+    from a confident one and fixed by hand (method "manual" is never overwritten)."""
+
+    __tablename__ = "game_links"
+
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id", ondelete="CASCADE"), primary_key=True)
+    source: Mapped[str] = mapped_column(String(20), primary_key=True)  # steam
+    external_id: Mapped[str | None] = mapped_column(String(100))  # None: looked for, not found
+    url: Mapped[str | None] = mapped_column(String(1000))
+    method: Mapped[str] = mapped_column(String(20))  # title_exact | not_found | manual
+    info: Mapped[dict] = mapped_column(JSONB, default=dict)  # name, developers, release, tags, review totals
+    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class Document(Base):
+    """One text about a game from any platform: a store page, a player review, a developer post, a full critic
+    review. Evidence is extracted once per document; `extracted_at` marks it done."""
+
+    __tablename__ = "documents"
+    __table_args__ = (UniqueConstraint("source", "ext_id"), Index("ix_documents_game_source", "game_id", "source"))
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id", ondelete="CASCADE"))
+    source: Mapped[str] = mapped_column(String(20))  # mc | steam_store | steam_reviews | steam_news | critic_full
+    kind: Mapped[str] = mapped_column(String(20))  # store_text | store_meta | user_review | critic_review | dev_news...
+    ext_id: Mapped[str] = mapped_column(String(200))  # stable per source: review id, news gid, url, "<appid>:about"
+    text: Mapped[str] = mapped_column(Text)
+    meta: Mapped[dict] = mapped_column(JSONB, default=dict)  # voted_up, hours, score, publication, lang, url
+    text_hash: Mapped[str] = mapped_column(String(40))  # a changed store text is a new version to read
+    posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Evidence(Base):
+    """One claim about one factor, with the documents it stands on. Fullness is computed from these rows alone."""
+
+    __tablename__ = "evidence"
+    __table_args__ = (Index("ix_evidence_game_factor", "game_id", "factor"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id", ondelete="CASCADE"))
+    source: Mapped[str] = mapped_column(String(20))
+    factor: Mapped[int] = mapped_column(Integer)  # 1..6
+    claim: Mapped[str] = mapped_column(Text)
+    document_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger), default=list)
+    specific: Mapped[bool] = mapped_column(Boolean)
+    polarity: Mapped[str] = mapped_column(String(10))  # plus | minus | neutral
+    who: Mapped[str | None] = mapped_column(String(300))
+    is_claim: Mapped[bool] = mapped_column(Boolean, default=False)  # the developer's own words, not a confirmation
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class GameProfile(Base):
+    """Fullness of what is known about a game, the six-factor profile once there is enough, and when to look again."""
+
+    __tablename__ = "game_profiles"
+
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id", ondelete="CASCADE"), primary_key=True)
+    fullness: Mapped[int] = mapped_column(Integer, default=0, index=True)  # 0..100
+    factors: Mapped[dict] = mapped_column(JSONB, default=dict)  # "1".."6" -> score, points, kinds
+    sources: Mapped[dict] = mapped_column(JSONB, default=dict)  # source -> documents, evidence
+    evidence_count: Mapped[int] = mapped_column(Integer, default=0)
+    payload: Mapped[dict | None] = mapped_column(JSONB)  # the profile; None until fullness reaches the threshold
+    profile_evidence: Mapped[int] = mapped_column(Integer, default=0)  # evidence the profile was built from
+    model: Mapped[str | None] = mapped_column(String(100))
+    enriched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    profiled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_enrich_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    error: Mapped[str | None] = mapped_column(Text)
+
+
+class ProfileCall(Base):
+    """Every model call of the profile pipeline: what today's token budget counts."""
+
+    __tablename__ = "profile_calls"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id", ondelete="CASCADE"), index=True)
+    stage: Mapped[str] = mapped_column(String(20))  # extract | profile
+    source: Mapped[str | None] = mapped_column(String(20))
+    model: Mapped[str] = mapped_column(String(100))
+    tokens_in: Mapped[int] = mapped_column(Integer, default=0)
+    tokens_out: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)

@@ -29,6 +29,7 @@ from app.models import (
     TopRelease,
 )
 from app.pipeline.quota import PENDING_STATUSES, deep_quota
+from app.profile.pipeline import card as profile_card
 
 settings = get_settings()
 
@@ -171,6 +172,7 @@ async def game_detail(slug: str, session: AsyncSession = Depends(db)):
         "stored_reviews": {"critic": stored.get("critic", 0), "user": stored.get("user", 0)},
         "analysis": latest,
         "similar": await _similar(session, g),
+        "profile": await profile_card(session, g, settings.profile_min_fullness),
         "light_essence": facets.essence if (facets := await session.get(GameFacets, g.id)) else None,
         "deep": deep and {"id": deep.id, "status": deep.status, "error": deep.error, "facts": deep.facts,
                           "video_title": deep.video_title, "updated_at": deep.updated_at},

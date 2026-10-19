@@ -4,7 +4,8 @@ from app.core.config import Settings
 from app.pipeline.quota import quota_day, refusal
 
 S = Settings(deep_daily_pool=5, deep_per_user=2, deep_est_tokens=36_000, llm_daily_tokens=1_160_000,
-             llm_safety=0.8, service_reserve_tokens=190_000)
+             llm_safety=0.8, service_reserve_tokens=190_000,
+             gemini_api_key="one", gemini_api_keys="")  # one key, whatever backend/.env holds
 
 
 def test_quiet_day_allows_a_deep_analysis():

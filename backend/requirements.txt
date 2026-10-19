@@ -9,3 +9,4 @@ arq>=0.26
 pydantic-settings>=2.3
 google-genai>=2.30
 numpy>=2.0
+trafilatura>=2.0,<3  # the article out of a critic's review page

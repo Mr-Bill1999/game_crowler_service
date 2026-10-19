@@ -81,6 +81,21 @@ class Settings(BaseSettings):
     service_reserve_tokens: int = 190_000  # peak day of review analyses + light essence of ~100 new games + 25% retries
     quota_tz: str = "America/Los_Angeles"  # Google resets free quotas at midnight Pacific
 
+    # Game profile: six factors from several platforms, fullness of what is known (docs/game-profile.md)
+    profile_enabled: bool = True
+    profile_min_fullness: int = 60  # below it the card shows fullness and what is missing, not a profile
+    profile_rebuild_growth: float = 0.2  # rebuild the profile when evidence grew this much since the last one
+    profile_per_run: int = 40  # games enriched after each discovery run; the rest wait for the next hour
+    steam_rps: float = 1.0  # store.steampowered.com answers 429 to bursts; ~200 requests per 5 minutes is safe
+    steam_review_pages: int = 5  # newest 100-review pages read on first collection, to sample from
+    steam_reviews_cap: int = 100  # reviews kept per game: the 20-game test saturates between 25 and 100
+    steam_review_min_words: int = 15
+    critic_rps: float = 1.0  # per publication host
+    critic_max_reviews: int = 20  # full reviews fetched per game, newest first
+    enrich_hot_hours: int = 24  # how often a game's sources are collected again, by its tier
+    enrich_warm_hours: int = 72
+    enrich_cool_hours: int = 168
+
     # Test stand: replayable external calls and a frozen clock (see stand/README.md)
     tape_mode: str = "live"  # live | record | replay | auto (replay what is recorded, record the rest)
     tape_dir: Path = Path(__file__).parents[2] / "tapes"

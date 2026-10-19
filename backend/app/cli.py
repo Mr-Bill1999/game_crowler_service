@@ -3,6 +3,8 @@
   python -m app.cli enqueue hourly|bootstrap|sweep [--days N]   queue a run for the worker
   python -m app.cli inline  hourly|bootstrap|sweep [--days N]   run here, without a worker
   python -m app.cli analyze <slug> [<slug> ...]                 analyse these games now, ignoring the trigger
+  python -m app.cli enrich <slug> [<slug> ...]                  game profile pass for these games now
+  python -m app.cli enrich-due [N]                              profile pass for the N games due first (default 40)
 """
 
 import argparse
@@ -43,9 +45,36 @@ async def analyze(slugs: list[str]) -> None:
         await pool.aclose()
 
 
+async def enrich(slugs: list[str], due: int | None = None) -> None:
+    pool = await create_pool(RedisSettings.from_dsn(get_settings().redis_url))
+    ctx: dict = {"redis": pool, "cli": True}
+    tasks.ctx_owner.set("cli")
+    await tasks.startup(ctx)
+    try:
+        if due is not None:
+            print(json.dumps(await tasks.enrich_due(ctx, due), ensure_ascii=False))
+            return
+        async with SessionLocal() as s:
+            ids = {g.slug: g.id for g in (await s.execute(select(Game).where(Game.slug.in_(slugs)))).scalars()}
+        for slug in slugs:
+            if slug not in ids:
+                print(f"{slug}: нет в базе")
+                continue
+            print(json.dumps(await tasks.enrich_game(ctx, ids[slug]), ensure_ascii=False))
+    finally:
+        await tasks.shutdown(ctx)
+        await pool.aclose()
+
+
 async def main() -> None:
     if len(sys.argv) > 1 and sys.argv[1] == "analyze":
         await analyze(sys.argv[2:])
+        return
+    if len(sys.argv) > 1 and sys.argv[1] == "enrich":
+        await enrich(sys.argv[2:])
+        return
+    if len(sys.argv) > 1 and sys.argv[1] == "enrich-due":
+        await enrich([], int(sys.argv[2]) if len(sys.argv) > 2 else get_settings().profile_per_run)
         return
     p = argparse.ArgumentParser()
     p.add_argument("mode", choices=["enqueue", "inline"])

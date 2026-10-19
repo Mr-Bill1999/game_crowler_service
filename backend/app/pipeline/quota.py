@@ -15,7 +15,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
-from app.models import Analysis, DeepAnalysis, GameFacets
+from app.models import Analysis, DeepAnalysis, GameFacets, ProfileCall
 
 # Rows that never reached the model do not use the pool.
 FREE_STATUSES = ("not_configured", "no_video", "search_error", "lost", "failed")
@@ -31,7 +31,7 @@ class DeepQuota:
     per_user: int
     ip_used: int
     per_ip: int
-    service_tokens: int  # spent today by review analyses, essences and light essences
+    service_tokens: int  # spent today by review analyses, essences, light essences and game profiles
     deep_tokens: int  # spent today by deep analyses, pending ones counted at the estimate
     budget_tokens: int
     resets_at: datetime
@@ -98,6 +98,8 @@ async def deep_quota(session: AsyncSession, s: Settings, user: str | None, now: 
                                     .where(Analysis.created_at >= start)) or 0)
     service += await session.scalar(select(func.coalesce(func.sum(GameFacets.tokens_in + GameFacets.tokens_out), 0))
                                     .where(GameFacets.essence_at >= start)) or 0
+    service += await session.scalar(select(func.coalesce(func.sum(ProfileCall.tokens_in + ProfileCall.tokens_out), 0))
+                                    .where(ProfileCall.created_at >= start)) or 0
     spent = await session.scalar(select(func.coalesce(func.sum(DeepAnalysis.tokens_in + DeepAnalysis.tokens_out), 0))
                                  .where(today)) or 0
     pending = await session.scalar(select(func.count())

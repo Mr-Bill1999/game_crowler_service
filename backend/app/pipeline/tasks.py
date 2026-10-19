@@ -1,4 +1,4 @@
-"""arq worker: hourly cycle, bootstrap, daily sweep, analysis and deep-analyze jobs."""
+"""arq worker: hourly cycle, bootstrap, daily sweep, analysis, deep-analyze and game-profile jobs."""
 
 import asyncio
 import logging
@@ -27,8 +27,12 @@ from app.pipeline.ingest import Deps, IngestResult, ingest_game
 from app.pipeline.quota import FREE_STATUSES
 from app.pipeline.similarity import rebuild
 from app.pipeline.top import record_top
+from app.profile.pipeline import due_games
+from app.profile.pipeline import enrich_game as enrich_one
 from app.scraper.client import MCClient
 from app.scraper.metacritic import Metacritic
+from app.sources.critics import Critics
+from app.sources.steam import Steam
 from app.sources.youtube import YouTube, YouTubeError, pick_clips, pick_video
 
 log = logging.getLogger(__name__)
@@ -44,7 +48,8 @@ async def startup(ctx: dict) -> None:
     redis = Redis.from_url(s.redis_url, decode_responses=True)
     bus = EventBus(redis, s.events_stream, s.events_maxlen)
     client = MCClient(s, bus)
-    ctx.update(deps=Deps(s, Metacritic(client, s), bus, SessionLocal), _client=client, _bus_redis=redis)
+    ctx.update(deps=Deps(s, Metacritic(client, s), bus, SessionLocal), _client=client, _bus_redis=redis,
+               steam=Steam(s.steam_rps, s.steam_review_min_words), critics=Critics(s.critic_rps))
     if not ctx.get("cli"):  # the worker starting: none of its runs can still be in progress
         async with SessionLocal() as session:
             if lost := await close_lost_runs(session, datetime.now(UTC), worker_restarted=True):
@@ -64,6 +69,8 @@ async def startup(ctx: dict) -> None:
 
 async def shutdown(ctx: dict) -> None:
     await ctx["_client"].aclose()
+    await ctx["steam"].aclose()
+    await ctx["critics"].aclose()
     await ctx["_bus_redis"].aclose()
 
 
@@ -147,6 +154,8 @@ async def _run(ctx: dict, kind: str, work) -> dict:
         raise
     await _finish_run(d, run_id, "partial" if stats.get("failed") else "done", stats)
     await ctx["redis"].enqueue_job("update_facets", _job_id="facets")  # new games need essences and neighbours
+    if d.settings.profile_enabled:
+        await ctx["redis"].enqueue_job("enrich_due", _job_id="enrich_due")
     return stats
 
 
@@ -376,6 +385,34 @@ async def deep_analyze(ctx: dict, deep_id: int) -> None:
                  tokens_out=r.tokens_out + q_out, **video_fields)
 
 
+async def enrich_game(ctx: dict, game_id: int) -> dict:
+    """One game's profile pass: collect from every platform, extract evidence, fullness, profile when enough."""
+    d: Deps = ctx["deps"]
+    res = await enrich_one(d.sessions, ctx.get("llm"), ctx["steam"], ctx["critics"], d.settings, game_id)
+    await d.bus.emit("profile.game", "error" if res.errors and not res.extracted and not res.collected else "ok",
+                     slug=res.slug, collected=res.collected or None, evidence=res.extracted or None,
+                     fullness=res.fullness, built=res.built or None, tokens_in=res.tokens_in or None,
+                     tokens_out=res.tokens_out or None, errors=res.errors or None)
+    return {"slug": res.slug, "fullness": res.fullness, "built": res.built}
+
+
+async def enrich_due(ctx: dict, limit: int | None = None) -> dict:
+    """Games never enriched or due again, a batch per discovery run; one at a time, Steam's pace is per worker."""
+    d: Deps = ctx["deps"]
+    async with d.sessions() as session:
+        ids = await due_games(session, limit or d.settings.profile_per_run, clock.now())
+    await d.bus.emit("profile.due", count=len(ids))
+    built = 0
+    for game_id in ids:
+        try:
+            built += (await enrich_game(ctx, game_id))["built"]
+        except Exception as e:  # one game failing must not stop the batch
+            log.exception("enrich failed: %s", game_id)
+            await d.bus.emit("profile.game", "error", game_id=game_id, error=_reason(e))
+    await d.bus.emit("profile.done", games=len(ids), built=built)
+    return {"games": len(ids), "built": built}
+
+
 _s = get_settings()
 
 
@@ -387,6 +424,8 @@ class WorkerSettings:
         func(analyze_game, keep_result=0),
         func(deep_analyze, keep_result=0),
         func(update_facets, timeout=RUN_TIMEOUT, keep_result=0),
+        func(enrich_game, keep_result=0),
+        func(enrich_due, timeout=RUN_TIMEOUT, keep_result=0),
     ]
     cron_jobs = [
         cron(run_hourly, minute=0, timeout=RUN_TIMEOUT, unique=True, job_id="cron:hourly"),
