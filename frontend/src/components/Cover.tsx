@@ -6,7 +6,7 @@ export function Cover({ src, alt = "", className = "", children, loading = "lazy
   return (
     <div className={`game-cover ${className}`}>
       {src && !failed ? <img src={src} alt={alt} loading={loading} decoding="async" onError={() => setFailed(true)} /> : (
-        <span className="cover-fallback"><span className="brand-mark" aria-hidden="true"><span /><span /></span>{alt && <span>Обложка недоступна</span>}</span>
+        <span className="cover-fallback"><img className="brand-mark" src="/logo.png" alt="" width="142" height="96" />{alt && <span>Обложка недоступна</span>}</span>
       )}
       {children}
     </div>

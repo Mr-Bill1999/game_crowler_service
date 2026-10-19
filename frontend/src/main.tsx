@@ -24,7 +24,7 @@ function Shell() {
     <div className={`shell ${welcome ? "welcome-shell" : ""}`}>
       <header className="topbar">
         <NavLink to="/" className="brand">
-          <span className="brand-mark" aria-hidden="true"><span /><span /></span>GameGallery
+          <img className="brand-mark" src="/logo.png" alt="" width="142" height="96" />GameGallery
         </NavLink>
         {!welcome && <nav aria-label="Основная навигация">
           <NavLink to="/games" className={({ isActive }) => isActive || legacyCatalog || location.pathname.startsWith("/game/") ? "active" : undefined}>
