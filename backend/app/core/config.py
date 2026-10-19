@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     llm_rpm: float = 12  # free tier answers 429 to bursts; pace below its per-minute limit
     llm_concurrency: int = 2
     gemini_api_key: str | None = None
+    gemini_api_keys: str = ""  # more keys, comma-separated, used in turn
 
     # Similar games: light essence of every game with a store description, facet vectors, precomputed neighbours
     embed_model: str = "gemini-embedding-001"  # the model the similarity experiment was judged on
@@ -93,6 +94,21 @@ class Settings(BaseSettings):
     def _empty_is_unset(cls, v):
         """Compose passes unset variables as empty strings: treat them as not given."""
         return None if v == "" else v
+
+    @property
+    def gemini_keys(self) -> list[str]:
+        """Every configured key once, GA_GEMINI_API_KEY first."""
+        keys = [self.gemini_api_key or ""] + self.gemini_api_keys.split(",")
+        return list(dict.fromkeys(k.strip() for k in keys if k.strip()))
+
+    @property
+    def llm_daily_budget(self) -> int:
+        """Daily tokens across all configured keys: each key has its own daily limit."""
+        return self.llm_daily_tokens * max(1, len(self.gemini_keys))
+
+    @property
+    def embed_daily_budget(self) -> int:
+        return self.embed_daily_texts * max(1, len(self.gemini_keys))
 
     # Event bus
     events_stream: str = "ga:events"

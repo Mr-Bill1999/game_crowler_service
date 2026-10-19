@@ -88,9 +88,10 @@ async def test_retry_after_is_honoured(inject, sleeps):
 class FakeGemini(gemini_mod.GeminiProvider):
     def __init__(self):  # no SDK client: the single attempt is faked below
         self.max_attempts, self.default_model = 4, "m"
+        self._keys, self._turn = [gemini_mod._Key("k", 1)], 0  # one key: a daily limit has nowhere to go
         self.calls = 0
 
-    async def _generate_once(self, **kw):
+    async def _generate_once(self, key, **kw):
         self.calls += 1
         return LLMResult(data={"ok": True}, model="m", tokens_in=1, tokens_out=1, cost_usd=0)
 

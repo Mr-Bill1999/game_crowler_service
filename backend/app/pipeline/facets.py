@@ -84,7 +84,7 @@ async def embed_pending(provider: GeminiProvider, s: Settings, sessions, bus: Ev
             select(GameFacets, Game.title).join(Game, Game.id == GameFacets.game_id)
             .where((GameFacets.embed_hash.is_(None)) | (GameFacets.embed_hash != GameFacets.source_hash))
             .order_by(GameFacets.essence_at, GameFacets.game_id))).all()  # stable batches on a frozen clock
-    room = max(0, s.embed_daily_texts - used) // len(FACETS)
+    room = max(0, s.embed_daily_budget - used) // len(FACETS)
     todo, waiting = pending[:room], len(pending) - min(room, len(pending))
     per_batch = max(1, s.embed_batch // len(FACETS))
     done = 0

@@ -55,35 +55,72 @@ def _clean_schema(schema):
     return schema
 
 
+class _Key:
+    """One API key: its client and, after a daily-limit answer, when to try it again."""
+
+    def __init__(self, api_key: str, n: int):
+        self.client = genai.Client(api_key=api_key)
+        self.label = f"key{n}"  # never the key itself: labels reach logs and errors
+        self.resting_until = 0.0
+
+
+class QuotaExhausted(Exception):
+    """Every key has answered with a daily limit; the next cycle tries again."""
+
+
 class GeminiProvider:
     name = "gemini"
 
-    def __init__(self, api_key: str, default_model: str = "gemini-3.1-flash-lite", max_attempts: int = 6,
+    def __init__(self, api_key: str | list[str], default_model: str = "gemini-3.1-flash-lite", max_attempts: int = 6,
                  rpm: float | None = None, concurrency: int | None = None):
-        """rpm/concurrency pace calls per process; the free tier answers 429 to bursts well below its daily quota."""
-        self.client = genai.Client(api_key=api_key)
+        """rpm/concurrency pace calls per process; the free tier answers 429 to bursts well below its daily quota.
+        Several keys are used in turn: rpm is per key, so the pace grows with the keys that still have quota,
+        and a key that hits its daily limit rests for an hour while the call moves on."""
+        keys = [api_key] if isinstance(api_key, str) else list(dict.fromkeys(api_key))
+        if not keys:
+            raise ValueError("no Gemini API key")
+        self._keys = [_Key(k, i + 1) for i, k in enumerate(keys)]
+        self._turn = 0
+        self.client = self._keys[0].client  # model listing in eval scripts
         self.default_model = default_model
         self.max_attempts = max_attempts
-        self._gate = asyncio.Semaphore(concurrency) if concurrency else None
-        self._interval = 60.0 / rpm if rpm else 0.0
+        self._gate = asyncio.Semaphore(concurrency * len(keys)) if concurrency else None
+        self._rpm = rpm
         self._next = 0.0
         self._lock = asyncio.Lock()
 
+    def _active(self) -> list[_Key]:
+        now = time.monotonic()
+        return [k for k in self._keys if k.resting_until <= now]
+
+    def _pick(self) -> _Key:
+        active = self._active()
+        if not active:
+            raise QuotaExhausted(f"all {len(self._keys)} Gemini keys are over their daily limit")
+        self._turn = (self._turn + 1) % len(active)
+        return active[self._turn]
+
+    def _rest(self, key: _Key) -> bool:
+        """A daily limit on this key: set it aside for an hour. True when another key can take the call."""
+        key.resting_until = time.monotonic() + 3600
+        return bool(self._active())
+
     async def _pace(self) -> None:
-        if not self._interval:
+        if not self._rpm:
             return
         async with self._lock:
+            interval = 60.0 / (self._rpm * max(1, len(self._active())))
             now = time.monotonic()
             if self._next > now:
                 await asyncio.sleep(self._next - now)
-            self._next = max(time.monotonic(), self._next) + self._interval
+            self._next = max(time.monotonic(), self._next) + interval
 
-    async def _call(self, model: str, prompt: str, config):
+    async def _call(self, key: _Key, model: str, prompt: str, config):
         await self._pace()
         if self._gate is None:
-            return await self.client.aio.models.generate_content(model=model, contents=prompt, config=config)
+            return await key.client.aio.models.generate_content(model=model, contents=prompt, config=config)
         async with self._gate:
-            return await self.client.aio.models.generate_content(model=model, contents=prompt, config=config)
+            return await key.client.aio.models.generate_content(model=model, contents=prompt, config=config)
 
     async def generate_json(self, *, system: str, prompt: str | list[types.Part], schema: dict,
                             model: str | None = None, thinking_level: str | None = None,
@@ -94,25 +131,33 @@ class GeminiProvider:
                    "max_output_tokens": max_output_tokens, "media_resolution": media_resolution,
                    "prompt": prompt if isinstance(prompt, str)
                    else [p.model_dump(mode="json", exclude_none=True) for p in prompt]}
-        for attempt in range(1, self.max_attempts + 1):
+        attempt = 0
+        while attempt < self.max_attempts:
+            attempt += 1
+            key = self._pick()
             try:
                 if kind := faults.pick("gemini"):
                     raise faults.gemini_failure(kind)
                 return await tape.call(
                     "gemini", request,
-                    lambda: self._generate_once(system=system, prompt=prompt, schema=schema, model=model,
-                                                thinking_level=thinking_level, max_output_tokens=max_output_tokens,
-                                                media_resolution=media_resolution),
+                    lambda key=key: self._generate_once(key, system=system, prompt=prompt, schema=schema, model=model,
+                                                        thinking_level=thinking_level,
+                                                        max_output_tokens=max_output_tokens,
+                                                        media_resolution=media_resolution),
                     encode=asdict, decode=lambda d: LLMResult(**d), summary=f"{model} {system[:60]}")
             except errors.APIError as e:
                 delay = retry_delay(e, attempt)
-                # a daily limit answers "retry in hours": waiting it out would hold a worker slot until tomorrow
+                # a daily limit answers "retry in hours": another key takes the call, or the cycle fails now
+                # rather than holding a worker slot until tomorrow
+                if e.code == 429 and delay > MAX_WAIT_S and self._rest(key):
+                    attempt -= 1
+                    continue
                 if e.code not in RETRYABLE or attempt == self.max_attempts or delay > MAX_WAIT_S:
                     raise
                 await asyncio.sleep(delay)
         raise RuntimeError("unreachable")
 
-    async def _generate_once(self, *, system: str, prompt: str | list[types.Part], schema: dict, model: str,
+    async def _generate_once(self, key: _Key, *, system: str, prompt: str | list[types.Part], schema: dict, model: str,
                              thinking_level: str | None, max_output_tokens: int,
                              media_resolution: str | None) -> LLMResult:
         if isinstance(prompt, list):
@@ -127,7 +172,7 @@ class GeminiProvider:
             if thinking_level else None,
         )
         t0 = time.perf_counter()
-        r = await self._call(model, prompt, config)
+        r = await self._call(key, model, prompt, config)
         latency = time.perf_counter() - t0
         if not r.text:
             reason = r.candidates[0].finish_reason if r.candidates else "no candidates"
@@ -146,18 +191,24 @@ class GeminiProvider:
         contents = [types.Content(parts=[types.Part(text=t)]) for t in texts]
         config = types.EmbedContentConfig(task_type="SEMANTIC_SIMILARITY", output_dimensionality=dim)
 
-        async def once() -> list[list[float]]:
-            r = await self.client.aio.models.embed_content(model=model, contents=contents, config=config)
+        async def once(key: _Key) -> list[list[float]]:
+            r = await key.client.aio.models.embed_content(model=model, contents=contents, config=config)
             return [e.values for e in r.embeddings]
 
-        for attempt in range(1, self.max_attempts + 1):
+        attempt = 0
+        while attempt < self.max_attempts:
+            attempt += 1
+            key = self._pick()
             try:
                 if kind := faults.pick("gemini-embed"):
                     raise faults.gemini_failure(kind)
-                return await tape.call("gemini-embed", {"model": model, "dim": dim, "texts": texts}, once,
-                                       summary=f"{model} x{len(texts)}")
+                return await tape.call("gemini-embed", {"model": model, "dim": dim, "texts": texts},
+                                       lambda key=key: once(key), summary=f"{model} x{len(texts)}")
             except errors.APIError as e:
                 delay = retry_delay(e, attempt)
+                if e.code == 429 and delay > MAX_WAIT_S and self._rest(key):
+                    attempt -= 1
+                    continue
                 if e.code not in RETRYABLE or attempt == self.max_attempts or delay > MAX_WAIT_S:
                     raise
                 await asyncio.sleep(delay)

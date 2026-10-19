@@ -56,10 +56,10 @@ async def startup(ctx: dict) -> None:
         if stale:
             await ctx["redis"].delete(*stale)
             await bus.emit("worker.recovered", "retry", jobs=len(stale))
-    if s.llm_provider == "gemini" and s.gemini_api_key:
-        ctx["llm"] = GeminiProvider(s.gemini_api_key, s.llm_model, rpm=s.llm_rpm, concurrency=s.llm_concurrency)
+    if s.llm_provider == "gemini" and s.gemini_keys:
+        ctx["llm"] = GeminiProvider(s.gemini_keys, s.llm_model, rpm=s.llm_rpm, concurrency=s.llm_concurrency)
     await bus.emit("worker.start", rps=s.rate_limit_rps, concurrency=s.max_concurrency,
-                   llm=s.llm_model if "llm" in ctx else None)
+                   llm=s.llm_model if "llm" in ctx else None, llm_keys=len(s.gemini_keys))
 
 
 async def shutdown(ctx: dict) -> None:

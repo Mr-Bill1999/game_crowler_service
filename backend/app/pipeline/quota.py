@@ -67,7 +67,7 @@ def refusal(s: Settings, *, used: int, user_used: int, service_tokens: int, deep
         return f"Ваш лимит на сегодня исчерпан ({user_used} из {s.deep_per_user})"
     if ip_used >= s.deep_per_ip:
         return f"Лимит на сегодня для вашей сети исчерпан ({ip_used} из {s.deep_per_ip})"
-    budget = int(s.llm_daily_tokens * s.llm_safety)
+    budget = int(s.llm_daily_budget * s.llm_safety)
     still_reserved = max(0, s.service_reserve_tokens - service_tokens)
     if service_tokens + deep_tokens + still_reserved + s.deep_est_tokens > budget:
         return "Сегодня квота модели нужна сервису для анализа отзывов"
@@ -104,7 +104,7 @@ async def deep_quota(session: AsyncSession, s: Settings, user: str | None, now: 
                                    .where(today, DeepAnalysis.status.in_(PENDING_STATUSES))) or 0
     deep = int(spent) + pending * s.deep_est_tokens
     return DeepQuota(pool=s.deep_daily_pool, used=used, user_used=user_used, per_user=s.deep_per_user,
-                     service_tokens=int(service), deep_tokens=deep, budget_tokens=int(s.llm_daily_tokens * s.llm_safety),
+                     service_tokens=int(service), deep_tokens=deep, budget_tokens=int(s.llm_daily_budget * s.llm_safety),
                      resets_at=resets_at,
                      ip_used=ip_used, per_ip=s.deep_per_ip,
                      reason=refusal(s, used=used, user_used=user_used, service_tokens=int(service), deep_tokens=deep,
