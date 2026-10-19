@@ -297,6 +297,7 @@ class GameProfile(Base):
     profile_evidence: Mapped[int] = mapped_column(Integer, default=0)  # evidence the profile was built from
     model: Mapped[str | None] = mapped_column(String(100))
     enriched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    first_enriched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     profiled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     next_enrich_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     error: Mapped[str | None] = mapped_column(Text)

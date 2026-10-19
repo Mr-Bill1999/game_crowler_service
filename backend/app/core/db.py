@@ -52,4 +52,7 @@ MIGRATIONS = [
     "ALTER TABLE deep_analyses ADD COLUMN IF NOT EXISTS requested_ip varchar(64)",
     "ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS owner varchar(20) NOT NULL DEFAULT 'worker'",
     "CREATE INDEX IF NOT EXISTS ix_analyses_created ON analyses (created_at)",
+    "ALTER TABLE game_profiles ADD COLUMN IF NOT EXISTS first_enriched_at timestamptz",
+    "UPDATE game_profiles SET first_enriched_at = enriched_at WHERE first_enriched_at IS NULL",
+    "CREATE INDEX IF NOT EXISTS ix_game_profiles_first_enriched_at ON game_profiles (first_enriched_at)",
 ]

@@ -85,7 +85,11 @@ class Settings(BaseSettings):
     profile_enabled: bool = True
     profile_min_fullness: int = 60  # below it the card shows fullness and what is missing, not a profile
     profile_rebuild_growth: float = 0.2  # rebuild the profile when evidence grew this much since the last one
-    profile_per_run: int = 40  # games enriched after each discovery run; the rest wait for the next hour
+    profile_per_run: int = 40  # new and due games per run, at most; the rest wait for the next hour
+    profile_new_days: int = 3  # discovered within this window: "new", always enriched (the discovery window)
+    profile_backlog_share: float = 0.25  # of the earlier catalogue per quota day: four days to cover it all
+    profile_token_share: float = 0.6  # of the day's safe token budget the profiles may spend; the rest is the
+    # summaries' and deep analyses'
     steam_rps: float = 1.0  # store.steampowered.com answers 429 to bursts; ~200 requests per 5 minutes is safe
     steam_review_pages: int = 5  # newest 100-review pages read on first collection, to sample from
     steam_reviews_cap: int = 100  # reviews kept per game: the 20-game test saturates between 25 and 100

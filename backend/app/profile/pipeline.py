@@ -2,14 +2,16 @@
 fullness, build the profile once there is enough and again when the evidence has grown, plan the next pass."""
 
 import logging
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 
 from app.core import clock
 from app.core.config import Settings
 from app.models import Document, Evidence, Game, GameLink, GameProfile, ProfileCall, Review
+from app.pipeline.quota import quota_day
 from app.profile import build as builder
 from app.profile.collect import critic_docs, metacritic_docs, steam_docs, steam_link
 from app.profile.evidence import Doc, extract
@@ -40,15 +42,62 @@ def next_pass(game: Game, now: datetime, s: Settings) -> datetime | None:
     return now + timedelta(hours=hours)
 
 
-async def due_games(session, limit: int, now: datetime) -> list[int]:
-    """Games never enriched or due again; the New Releases top first, then the most reviewed and the newest."""
-    q = (select(Game.id).outerjoin(GameProfile, GameProfile.game_id == Game.id)
-         .where(Game.archived_at.is_(None),
-                or_(GameProfile.game_id.is_(None), GameProfile.next_enrich_at <= now))
-         .order_by(Game.top_rank.asc().nulls_last(), (Game.critic_count + Game.user_count).desc(),
-                   Game.release_date.desc().nulls_last())
-         .limit(limit))
-    return list((await session.execute(q)).scalars())
+@dataclass
+class Batch:
+    """What one run takes: every new game, games due again, and a share of the earlier catalogue."""
+
+    ids: list[int]
+    new: int = 0
+    refresh: int = 0
+    backlog: int = 0
+    backlog_left_today: int = 0
+    backlog_remaining: int = 0
+
+
+PRIORITY = (Game.top_rank.asc().nulls_last(), (Game.critic_count + Game.user_count).desc(),
+            Game.release_date.desc().nulls_last())
+
+
+async def plan_batch(session, s: Settings, now: datetime, limit: int | None = None) -> Batch:
+    """New games (discovered within the discovery window) are always taken, then games due again, then the earlier
+    catalogue: at most `profile_backlog_share` of it per quota day, spread over the day's runs, so the whole
+    catalogue fills in a few days without crowding out the new games or the token budget."""
+    limit = limit or s.profile_per_run
+    new_cut = now - timedelta(days=s.profile_new_days)
+    day_start, _ = quota_day(now, s.quota_tz)
+    live = Game.archived_at.is_(None)
+    never = GameProfile.game_id.is_(None)
+    base = select(Game.id).outerjoin(GameProfile, GameProfile.game_id == Game.id)
+
+    new = list((await session.execute(base.where(live, never, Game.discovered_at >= new_cut)
+                                      .order_by(*PRIORITY).limit(limit))).scalars())
+    refresh = list((await session.execute(base.where(live, GameProfile.next_enrich_at <= now)
+                                          .order_by(GameProfile.next_enrich_at).limit(max(0, limit - len(new))))
+                    ).scalars())
+
+    old = Game.discovered_at < new_cut
+    total = await session.scalar(select(func.count()).select_from(Game).where(live, old)) or 0
+    remaining = await session.scalar(select(func.count()).select_from(Game).outerjoin(
+        GameProfile, GameProfile.game_id == Game.id).where(live, old, never)) or 0
+    done_today = await session.scalar(select(func.count()).select_from(GameProfile).join(
+        Game, Game.id == GameProfile.game_id).where(old, GameProfile.first_enriched_at >= day_start)) or 0
+    daily = math.ceil(s.profile_backlog_share * total)
+    left_today = max(0, daily - done_today)
+    take = min(left_today, math.ceil(daily / 12))  # a twelfth of the day's share per run: done by midday
+    backlog = list((await session.execute(base.where(live, never, old).order_by(*PRIORITY).limit(take))).scalars()
+                   ) if take else []
+    return Batch(ids=new + refresh + backlog, new=len(new), refresh=len(refresh), backlog=len(backlog),
+                 backlog_left_today=left_today - len(backlog), backlog_remaining=remaining - len(backlog))
+
+
+async def tokens_today(session, s: Settings, now: datetime) -> int:
+    day_start, _ = quota_day(now, s.quota_tz)
+    return await session.scalar(select(func.coalesce(func.sum(ProfileCall.tokens_in + ProfileCall.tokens_out), 0))
+                                .where(ProfileCall.created_at >= day_start)) or 0
+
+
+def token_cap(s: Settings) -> int:
+    return int(s.profile_token_share * s.llm_daily_budget * s.llm_safety)
 
 
 async def collect_all(sessions, steam: Steam, critics: Critics, s: Settings, game_id: int,
@@ -134,6 +183,7 @@ async def enrich_game(sessions, provider, steam: Steam, critics: Critics, s: Set
         session.add(prof)
         prof.fullness, prof.factors, prof.sources, prof.evidence_count = total, factors, by_source, len(evidence)
         prof.enriched_at, prof.next_enrich_at = now, next_pass(game, now, s)
+        prof.first_enriched_at = prof.first_enriched_at or now
         prof.error = "; ".join(f"{k}: {v}" for k, v in res.errors.items()) or None
         grown = len(evidence) >= max(1, prof.profile_evidence) * (1 + s.profile_rebuild_growth)
         want = provider is not None and total >= s.profile_min_fullness and (prof.payload is None or grown)

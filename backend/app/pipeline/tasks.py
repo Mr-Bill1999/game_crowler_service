@@ -27,8 +27,8 @@ from app.pipeline.ingest import Deps, IngestResult, ingest_game
 from app.pipeline.quota import FREE_STATUSES
 from app.pipeline.similarity import rebuild
 from app.pipeline.top import record_top
-from app.profile.pipeline import due_games
 from app.profile.pipeline import enrich_game as enrich_one
+from app.profile.pipeline import plan_batch, token_cap, tokens_today
 from app.scraper.client import MCClient
 from app.scraper.metacritic import Metacritic
 from app.sources.critics import Critics
@@ -397,20 +397,34 @@ async def enrich_game(ctx: dict, game_id: int) -> dict:
 
 
 async def enrich_due(ctx: dict, limit: int | None = None) -> dict:
-    """Games never enriched or due again, a batch per discovery run; one at a time, Steam's pace is per worker."""
+    """Every new game, games due again and a quarter of the earlier catalogue a day, one game at a time (Steam's
+    pace is per worker), stopping when the profiles have spent their share of today's tokens."""
     d: Deps = ctx["deps"]
+    s = d.settings
     async with d.sessions() as session:
-        ids = await due_games(session, limit or d.settings.profile_per_run, clock.now())
-    await d.bus.emit("profile.due", count=len(ids))
-    built = 0
-    for game_id in ids:
+        batch = await plan_batch(session, s, clock.now(), limit)
+    await d.bus.emit("profile.due", count=len(batch.ids), new=batch.new, refresh=batch.refresh,
+                     backlog=batch.backlog, backlog_left_today=batch.backlog_left_today,
+                     backlog_remaining=batch.backlog_remaining)
+    built = done = 0
+    stopped = None
+    cap = token_cap(s)
+    for game_id in batch.ids:
+        async with d.sessions() as session:
+            spent = await tokens_today(session, s, clock.now())
+        if spent >= cap:
+            stopped = f"profiles spent {spent} of {cap} tokens today"
+            break
         try:
             built += (await enrich_game(ctx, game_id))["built"]
+            done += 1
         except Exception as e:  # one game failing must not stop the batch
             log.exception("enrich failed: %s", game_id)
             await d.bus.emit("profile.game", "error", game_id=game_id, error=_reason(e))
-    await d.bus.emit("profile.done", games=len(ids), built=built)
-    return {"games": len(ids), "built": built}
+    await d.bus.emit("profile.done", "skip" if stopped else "ok", games=done, built=built, planned=len(batch.ids),
+                     stopped=stopped)
+    return {"games": done, "built": built, "planned": len(batch.ids), "new": batch.new, "refresh": batch.refresh,
+            "backlog": batch.backlog, "backlog_remaining": batch.backlog_remaining, "stopped": stopped}
 
 
 _s = get_settings()
