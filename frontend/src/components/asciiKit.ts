@@ -1,6 +1,6 @@
 import * as THREE from "three";
 
-/* What the entrance hero and the companion share: the ASCII pass that turns a small render into
+/* The entrance hero's drawing kit: the ASCII pass that turns a small render into
    characters like pencil on paper, its glyph atlas, and the fireball's page-wide overlay. */
 
 export const RAMP = " .:-=+*#%@";

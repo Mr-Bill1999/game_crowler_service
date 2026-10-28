@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import React, { lazy, Suspense, useState } from "react";
+import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { useEffect } from "react";
@@ -10,9 +10,6 @@ import { GamesList } from "./pages/GamesList";
 import { Welcome } from "./pages/Welcome";
 import "./styles.css";
 
-// The wizard who travels with you through the site; loaded once the page has settled.
-const Companion = lazy(() => import("./components/Companion"));
-
 const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: 1 } } });
 
 function Shell() {
@@ -22,15 +19,6 @@ function Shell() {
   const welcome = location.pathname === "/" && !legacyCatalog;
 
   useEffect(() => { window.scrollTo(0, 0); }, [location.pathname]);
-  const [companion, setCompanion] = useState(false);
-  // On the catalog the wizard reads, on the Metacritic top he dances.
-  const catalog = location.pathname === "/games" || legacyCatalog;
-  const pose = catalog ? (params.has("top") ? "dance" : "read") : "stand";
-  useEffect(() => {
-    if (welcome || companion) return;
-    const timer = setTimeout(() => setCompanion(true), 1200);
-    return () => clearTimeout(timer);
-  }, [welcome, companion]);
 
   return (
     <div className={`shell ${welcome ? "welcome-shell" : ""}`}>
@@ -51,7 +39,6 @@ function Shell() {
           <Route path="/devpanel" element={<DevPanel />} />
         </Routes>
       </main>
-      {companion && !welcome && <Suspense fallback={null}><Companion path={location.pathname + location.search} pose={pose} /></Suspense>}
     </div>
   );
 }

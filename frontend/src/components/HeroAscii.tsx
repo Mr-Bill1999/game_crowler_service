@@ -166,9 +166,6 @@ export default function HeroAscii({ mode = "intro", round = 0, onOver, onExit }:
     loader.load(MODEL, (gltf) => {
       if (disposed) return;
       hero.add(gltf.scene);
-      // The book belongs to the companion's reading pose.
-      const book = gltf.scene.getObjectByName("Book");
-      if (book) book.visible = false;
       // GLTFLoader drops the dot from Blender names: "Hand.L" arrives as "HandL".
       hand = gltf.scene.getObjectByName("HandL") ?? gltf.scene.getObjectByName("Hand.L");
       mixer = new THREE.AnimationMixer(gltf.scene);
