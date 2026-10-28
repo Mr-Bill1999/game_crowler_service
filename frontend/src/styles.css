@@ -128,6 +128,21 @@ img { max-width:100%; }
 .entry-sun.is-up { pointer-events:none; }
 .entry-sun.is-up .entry-sun-text { opacity:0; }
 
+/* The companion: the wizard in the bottom right corner of every page after the entrance. */
+.companion { position:fixed; right:max(12px,env(safe-area-inset-right)); bottom:0; z-index:40; width:132px; height:176px; pointer-events:none; opacity:0; transform:translateY(12px); transition:opacity .5s,transform .5s; }
+.companion.is-ready { opacity:1; transform:none; }
+.companion.is-away { opacity:0; transform:translateY(24px); }
+.companion:before { content:""; position:absolute; left:8%; right:8%; top:6%; bottom:-6%; border-radius:50%; background:radial-gradient(closest-side,color-mix(in srgb,var(--paper) 94%,transparent) 55%,color-mix(in srgb,var(--paper) 0%,transparent)); }
+.companion canvas { position:absolute; inset:0; display:block; width:100%; height:100%; }
+.companion-ui { position:absolute; left:34%; right:34%; top:12%; bottom:6%; pointer-events:auto; }
+.companion.is-away .companion-ui { pointer-events:none; }
+.companion-hit { position:absolute; inset:0; padding:0; border:0; background:none; cursor:pointer; }
+.companion-off { position:absolute; right:-18px; top:-6px; width:20px; height:20px; padding:0; border:1px solid var(--line); border-radius:50%; background:var(--surface); color:var(--muted); font:400 12px/1 var(--f-mono); cursor:pointer; opacity:0; transition:opacity .2s,color .2s; }
+.companion-ui:hover .companion-off,.companion-off:focus-visible { opacity:1; }
+.companion-off:hover { color:var(--ink); }
+@media (max-width:720px) { .companion { width:96px; height:128px; right:4px; } }
+@media (hover:none) { .companion-off { opacity:.7; } }
+
 /* The arcade run: every text leaves, the stage takes the page, the pad stays as the controller. */
 .entry-head,.entry-title,.entry-panel,.entry-foot { transition:opacity .35s,visibility .35s; }
 .entry.is-playing .entry-head,.entry.is-playing .entry-title { opacity:0; visibility:hidden; }
