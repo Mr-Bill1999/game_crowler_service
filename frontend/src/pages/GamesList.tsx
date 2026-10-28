@@ -58,12 +58,7 @@ export function GamesList() {
   return (
     <div className="page catalog-page">
       <div className="page-head catalog-head">
-        <p className="eyebrow"><span className="status-dot" />НАЙДИ ТО, ВО ЧТО ЗАХОЧЕТСЯ ИГРАТЬ</p>
-        <h1>{top ? "Топ новых релизов" : "Твоя игровая галерея"}<span className="gradient-text">.</span></h1>
-        <p className="muted">
-          {games.data ? `${games.data.total.toLocaleString("ru-RU")} игр` : "Загружаю…"} ·{" "}
-          {top ? "Топ-20 из New Releases на Metacritic" : "Новинки, оценки и суть отзывов — в одном месте"}
-        </p>
+        <h1>{top ? "Топ Metacritic." : "Каталог."}<sup>{games.data ? games.data.total.toLocaleString("ru-RU") : ""}</sup></h1>
       </div>
 
       <div className="toolbar">
@@ -121,7 +116,6 @@ export function GamesList() {
           <button className={!top ? "active" : ""} aria-pressed={!top} onClick={() => update((p) => p.delete("top"))}>Новые релизы</button>
           <button className={top ? "active" : ""} aria-pressed={top} onClick={() => update((p) => (top ? p.delete("top") : p.set("top", "1")))}>Топ Metacritic <span>20</span></button>
         </div>
-        <span className="catalog-update"><span className="status-dot" />Обновляется каждый час</span>
       </div>
 
       {games.isError && <p className="error" role="alert">Не удалось загрузить список: {String(games.error.message)}</p>}
@@ -142,7 +136,6 @@ export function GamesList() {
           Показать ещё
         </button>
       )}
-      <footer className="catalog-footer"><span>Оценки критиков и игроков · Metacritic</span><span>GameGallery</span></footer>
     </div>
   );
 }

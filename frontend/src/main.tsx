@@ -24,15 +24,12 @@ function Shell() {
     <div className={`shell ${welcome ? "welcome-shell" : ""}`}>
       {/* The entrance has its own header in the light identity. */}
       {!welcome && <header className="topbar">
-        <NavLink to="/" className="brand">
-          <img className="brand-mark" src="/logo.png" alt="" width="142" height="96" />GameGallery
-        </NavLink>
+        <NavLink to="/" className="brand">GameGallery</NavLink>
         <nav aria-label="Основная навигация">
-          <NavLink to="/games" className={({ isActive }) => isActive || legacyCatalog || location.pathname.startsWith("/game/") ? "active" : undefined}>
-            Каталог
-          </NavLink>
-          <NavLink to="/devpanel">DevPanel<Icon name="arrow-up-right" /></NavLink>
+          <NavLink to="/games" end className={() => (location.pathname === "/games" && !params.has("top")) || legacyCatalog || location.pathname.startsWith("/game/") ? "active" : undefined}>Каталог</NavLink>
+          <NavLink to="/games?top=1" className={() => (location.pathname === "/games" && params.has("top") ? "active" : undefined)}>Топ Metacritic</NavLink>
         </nav>
+        <NavLink to="/devpanel" className="topbar-side">DevPanel<Icon name="arrow-up-right" /></NavLink>
       </header>}
       <main>
         <Routes>
