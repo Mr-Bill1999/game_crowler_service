@@ -26,6 +26,7 @@ function Shell() {
         <NavLink to="/" className="brand">
           <img className="brand-mark" src="/logo.png" alt="" width="142" height="96" />GameGallery
         </NavLink>
+        {welcome && <nav aria-label="Основная навигация"><NavLink to="/games">Каталог</NavLink></nav>}
         {!welcome && <nav aria-label="Основная навигация">
           <NavLink to="/games" className={({ isActive }) => isActive || legacyCatalog || location.pathname.startsWith("/game/") ? "active" : undefined}>
             Каталог
