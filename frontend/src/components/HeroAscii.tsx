@@ -10,7 +10,8 @@ import { padInput, type Action } from "./padInput";
    - run: the left stick, the d-pad left/right, A/D or ←/→ (he turns side-on while running);
    - jump: pad bottom, d-pad up, Space, W or ↑ — also on the run;
    - wave (pad right, E), dance (pad left, Q);
-   - fireball (pad top, F, or a click on the stage — thrown towards the click). */
+   - fireball (pad top, F, or a click on the stage — thrown towards the click). The fireball
+     flies across the whole page on its own overlay, in the same ASCII grid and colours. */
 
 const MODEL = "/hero/hero.glb";
 const RAMP = " .:-=+*#%@";
@@ -34,22 +35,14 @@ const FRAGMENT = `
 uniform sampler2D uScene;
 uniform sampler2D uAtlas;
 uniform vec2 uGrid;
-uniform vec2 uFire;
-uniform vec2 uFireDir;
-uniform float uFireOn;
 uniform vec3 uGround;
 uniform float uTime;
 varying vec2 vUv;
 
 const float N = ${RAMP.length}.0;
 const float G = ${GLYPHS.length}.0;
-const float ASPECT = ${(CELL_H / CELL_W).toFixed(3)};
 const vec3 INK = vec3(0.133, 0.149, 0.122);
 const vec3 SAGE = vec3(0.486, 0.541, 0.439);
-const vec3 FIRE = vec3(0.71, 0.33, 0.18);
-const vec3 EMBER = vec3(0.85, 0.58, 0.31);
-
-float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 
 void main() {
   vec2 cell = floor(vUv * uGrid);
@@ -83,25 +76,6 @@ void main() {
     alpha = 1.0;
   }
 
-  // The fireball: a hot core and a flickering tail streaming behind it.
-  if (uFireOn > 0.5) {
-    vec2 d = (cell - uFire) * vec2(1.0, ASPECT);
-    float dist = length(d);
-    float behind = -dot(d, uFireDir);
-    float side = abs(d.x * uFireDir.y - d.y * uFireDir.x);
-    float noise = hash(cell + floor(uTime * 18.0));
-    if (dist < 1.7) {
-      glyphIndex = N - 1.0; ink = FIRE; alpha = 1.0;
-    } else if (dist < 3.0) {
-      glyphIndex = N - 3.0; ink = FIRE; alpha = 0.95;
-    } else if (behind > 0.0 && behind < 18.0 && side < 2.8 - behind * 0.13 && noise > behind / 20.0) {
-      float t = behind / 18.0;
-      glyphIndex = t < 0.35 ? N - 4.0 : (t < 0.7 ? N - 5.0 : 1.0);
-      ink = mix(FIRE, EMBER, t);
-      alpha = 1.0 - t * 0.6;
-    }
-  }
-
   float glyph = texture2D(uAtlas, vec2((glyphIndex + inCell.x) / G, inCell.y)).r;
   gl_FragColor = vec4(ink, glyph * alpha);
 }
@@ -122,6 +96,76 @@ async function atlas() {
   ctx.textBaseline = "middle";
   [...GLYPHS].forEach((ch, i) => ctx.fillText(ch, i * ATLAS_W + ATLAS_W / 2, ATLAS_H / 2 + 2));
   return canvas;
+}
+
+/** The fireball's own layer over the whole page: the same ASCII grid and colours as the stage,
+    so it can leave the stage and cross the panel, the strip, everything, until the window edge. */
+function fireOverlay() {
+  const canvas = document.createElement("canvas");
+  canvas.setAttribute("aria-hidden", "true");
+  Object.assign(canvas.style, { position: "fixed", inset: "0", width: "100vw", height: "100vh", pointerEvents: "none", zIndex: "60" });
+  document.body.appendChild(canvas);
+  const ctx = canvas.getContext("2d")!;
+  const font = `500 ${CELL_H}px "JetBrains Mono", ui-monospace, monospace`;
+  let shot: { x: number; y: number; dx: number; dy: number } | null = null;
+  let drawn = false;
+  const size = () => {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(window.innerWidth * dpr);
+    canvas.height = Math.round(window.innerHeight * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  };
+  size();
+  window.addEventListener("resize", size);
+  const hash = (a: number, b: number) => { const v = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453; return v - Math.floor(v); };
+  const cell = (cx: number, cy: number, ch: string, color: string, alpha: number) => {
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    ctx.fillText(ch, cx * CELL_W, cy * CELL_H + CELL_H / 2);
+  };
+  return {
+    launch(x: number, y: number, dx: number, dy: number) {
+      const len = Math.hypot(dx, dy) || 1;
+      shot = { x, y, dx: dx / len, dy: dy / len };
+    },
+    step(dt: number, now: number) {
+      if (!shot && !drawn) return;
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      drawn = false;
+      if (!shot) return;
+      shot.x += shot.dx * 1100 * dt;
+      shot.y += shot.dy * 1100 * dt;
+      const margin = 160;
+      if (shot.x < -margin || shot.y < -margin || shot.x > window.innerWidth + margin || shot.y > window.innerHeight + margin) { shot = null; return; }
+      ctx.font = font;
+      ctx.textBaseline = "middle";
+      const hx = shot.x / CELL_W;
+      const hy = shot.y / CELL_H;
+      const tick = Math.floor(now / 55);
+      // Every cell around the head and along the tail, snapped to the grid, picks its glyph.
+      for (let cy = Math.floor(hy) - 6; cy <= Math.ceil(hy) + 6; cy++) {
+        for (let cx = Math.floor(hx) - 24; cx <= Math.ceil(hx) + 24; cx++) {
+          const ox = cx + 0.5 - hx;
+          const oy = (cy + 0.5 - hy) * (CELL_H / CELL_W);
+          const dist = Math.hypot(ox, oy);
+          const behind = -(ox * shot.dx + oy * shot.dy);
+          const side = Math.abs(ox * shot.dy - oy * shot.dx);
+          if (dist < 1.7) cell(cx, cy, "@", "#b5542e", 1);
+          else if (dist < 3) cell(cx, cy, "#", "#b5542e", 0.95);
+          else if (behind > 0 && behind < 20 && side < 2.8 - behind * 0.12 && hash(cx + tick, cy) > behind / 22) {
+            const t = behind / 20;
+            cell(cx, cy, t < 0.35 ? "*" : t < 0.7 ? "+" : ".", t < 0.5 ? "#c0663a" : "#d9944f", 1 - t * 0.6);
+          }
+        }
+      }
+      ctx.globalAlpha = 1;
+      drawn = true;
+    },
+    dispose() {
+      window.removeEventListener("resize", size);
+      canvas.remove();
+    },
+  };
 }
 
 export default function HeroAscii() {
@@ -159,9 +203,6 @@ export default function HeroAscii() {
         uScene: { value: target.texture },
         uAtlas: { value: null },
         uGrid: { value: new THREE.Vector2(1, 1) },
-        uFire: { value: new THREE.Vector2() },
-        uFireDir: { value: new THREE.Vector2(1, 0) },
-        uFireOn: { value: 0 },
         uGround: { value: new THREE.Vector3(-1, 0, 0) },
         uTime: { value: 0 },
       },
@@ -269,7 +310,7 @@ export default function HeroAscii() {
       });
     }, undefined, () => undefined);
 
-    let fire: { pos: THREE.Vector3; vel: THREE.Vector3 } | null = null;
+    const fire = fireOverlay();
     let firePending: { at: number; aim: THREE.Vector3 | null } | null = null;
     let facing = 1;
 
@@ -340,27 +381,22 @@ export default function HeroAscii() {
       yaw += (yawTarget - yaw) * Math.min(1, dt * 10);
       hero.rotation.y = yaw;
 
-      // The fireball leaves the throwing hand at the moment of release, towards the aim or ahead.
+      // The fireball leaves the throwing hand at the moment of release, towards the aim or ahead,
+      // and from there flies on the page overlay until it leaves the window.
       if (firePending && now >= firePending.at && hand) {
         hand.getWorldPosition(handPos);
-        const dir = firePending.aim ? firePending.aim.clone().sub(handPos).setZ(0) : new THREE.Vector3(facing, 0, 0);
-        if (dir.lengthSq() < 0.01) dir.set(facing, 0, 0);
-        fire = { pos: handPos.clone(), vel: dir.normalize().multiplyScalar(7) };
+        const aim = firePending.aim ?? handPos.clone().add(new THREE.Vector3(facing, 0, 0));
+        const rect = renderer.domElement.getBoundingClientRect();
+        const toPage = (p: THREE.Vector3) => {
+          tmp.copy(p).project(camera);
+          return { x: rect.left + (tmp.x * 0.5 + 0.5) * rect.width, y: rect.top + (0.5 - tmp.y * 0.5) * rect.height };
+        };
+        const from = toPage(handPos);
+        const to = toPage(aim);
+        fire.launch(from.x, from.y, to.x - from.x, to.y - from.y || 0);
         firePending = null;
       }
-      if (fire) {
-        fire.pos.addScaledVector(fire.vel, dt);
-        const p = fire.pos;
-        if (p.x > edge.right + 1.5 || p.x < edge.left - 1.5 || p.y < -0.3 || p.y > 6) fire = null;
-      }
-      ascii.uniforms.uFireOn.value = fire ? 1 : 0;
-      if (fire) {
-        const head = toCell(fire.pos);
-        ascii.uniforms.uFire.value.copy(head);
-        const ahead = toCell(fire.pos.clone().addScaledVector(fire.vel, 0.05)).sub(head);
-        ahead.y *= CELL_H / CELL_W;
-        ascii.uniforms.uFireDir.value.copy(ahead.lengthSq() > 0 ? ahead.normalize() : new THREE.Vector2(1, 0));
-      }
+      fire.step(dt, now);
       ascii.uniforms.uTime.value = now / 1000;
 
       renderer.setRenderTarget(target);
@@ -381,6 +417,7 @@ export default function HeroAscii() {
       window.removeEventListener("keyup", keyup);
       window.removeEventListener("blur", blur);
       stage?.removeEventListener("pointerdown", click);
+      fire.dispose();
       mixer?.stopAllAction();
       hero.traverse((node) => {
         const mesh = node as THREE.Mesh;
