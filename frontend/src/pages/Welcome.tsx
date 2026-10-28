@@ -4,7 +4,6 @@ import { Link } from "react-router-dom";
 import { api, type GameBrief } from "../api";
 import { Icon } from "../components/Icon";
 import type { Mode } from "../components/HeroAscii";
-import { SunAscii } from "../components/SunAscii";
 import { gameHud } from "../components/padInput";
 
 const PadScene = lazy(() => import("../components/PadScene"));
@@ -124,10 +123,11 @@ export function Welcome() {
       {/* The stage: the ASCII hero across it, the headline over its top, the gamepad at its foot. */}
       <section className="entry-stage">
         <Suspense fallback={null}><HeroAscii mode={mode} round={round} onOver={over} onExit={exit} /></Suspense>
-        {/* The sun of the scene is the Play button; in the run it stays up there as the sun. */}
+        {/* The sun of the scene is the Play button: the hero's ASCII scene draws it in this slot; in
+            the run it stays up there as the sun. */}
         <button type="button" className={`entry-sun ${mode !== "intro" ? "is-up" : ""}`} onClick={play} aria-label="Играть"
           tabIndex={mode === "intro" ? 0 : -1}>
-          <SunAscii play={mode === "intro"} />
+          <span className="entry-sun-slot" aria-hidden="true" />
           <span className="entry-sun-text">play{best ? ` · рекорд ${best}` : ""}</span>
         </button>
         {mode === "play" && <RunHud best={best} onExit={exit} />}

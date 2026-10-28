@@ -117,12 +117,11 @@ img { max-width:100%; }
 .entry-open { display:flex; justify-content:space-between; align-items:center; margin-top:24px; padding:10px 0; border-bottom:1px solid var(--e-ink); transition:color .16s,border-color .16s; }
 .entry-open:hover { color:var(--e-sage); border-color:var(--e-sage); }
 
-/* Play is the sun of the scene, drawn in ASCII like the wizard, high in the top right corner. */
+/* Play is the sun of the scene, high in the top right corner: the button is a round slot and a
+   label, the sun itself is drawn by the hero's ASCII scene behind it. */
 .entry-sun { position:absolute; right:3%; top:clamp(16px,6vh,64px); z-index:4; display:grid; justify-items:center; padding:0; border:0; background:none; color:var(--e-muted); cursor:pointer; }
 .entry-sun:focus-visible { outline:none; }
-.sun-ascii { margin:0; font:500 15px/1.12 var(--f-mono); color:var(--e-ink); transition:color .3s,transform .25s; }
-.sun-ray { color:var(--e-sage); }
-.entry-sun:hover .sun-ascii,.entry-sun:focus-visible .sun-ascii { color:var(--e-sage); transform:scale(1.06); }
+.entry-sun-slot { display:block; width:150px; height:150px; border-radius:50%; }
 .entry-sun-text { margin-top:8px; font:400 10px/1 var(--f-mono); letter-spacing:.04em; transition:opacity .3s,color .2s; }
 .entry-sun:hover .entry-sun-text,.entry-sun:focus-visible .entry-sun-text { color:var(--e-ink); }
 .entry-sun.is-up { pointer-events:none; }
@@ -481,8 +480,8 @@ select { min-height:42px; max-width:100%; padding:8px 12px; border:1px solid var
   .run-side { margin-right:0; }
   .run-hint { left:0; top:62px; font-size:11px !important; }
   .run-over { top:30%; }
-  .entry-sun { right:0; top:128px; }
-  .sun-ascii { font-size:12px; }
+  .entry-sun { right:0; top:124px; }
+  .entry-sun-slot { width:104px; height:104px; }
   }
 @media (pointer:coarse) {
   .chip,.feed-tabs button,.tabs button { min-height:44px; }

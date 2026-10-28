@@ -11,6 +11,7 @@ import { createRunner, type Box } from "./runner";
    starts on top of the gamepad and runs along a dotted floor within the stage:
    - run: the left stick, the d-pad left/right, A/D or ←/→ (he turns side-on while running);
    - jump: pad bottom, d-pad up, Space, W or ↑ — also on the run;
+   - crouch: d-pad down, S or ↓ held;
    - wave (pad right, E), dance (pad left, Q);
    - fireball (pad top, F, or a click on the stage — thrown towards the click). The fireball
      flies across the whole page on its own overlay, in the same ASCII grid and colours.
@@ -74,6 +75,30 @@ export default function HeroAscii({ mode = "intro", round = 0, onOver, onExit }:
     const camera = new THREE.PerspectiveCamera(26, 1, 0.1, 80);
     const target = new THREE.WebGLRenderTarget(8, 8, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
 
+    // The sun in the stage's top right corner, drawn by the same pass as the wizard: a lit ball
+    // and twelve cone rays, long and short in turn. It sits behind the Play button (.entry-sun)
+    // and turns slowly; faster while the button is hovered.
+    const sun = new THREE.Group();
+    const sunParts: THREE.Mesh[] = [];
+    {
+      const disc = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 24), new THREE.MeshStandardMaterial({ color: 0xf2ece2, roughness: 0.6 }));
+      sunParts.push(disc);
+      // Thin rays standing clear of the disc, flat to the viewer, so each one reads as a stroke.
+      const rayMaterial = new THREE.MeshStandardMaterial({ color: 0x6d7d5b, roughness: 0.5 });
+      for (let i = 0; i < 12; i++) {
+        const long = i % 2 === 0;
+        const len = long ? 0.7 : 0.42;
+        const ray = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.11, len, 10), rayMaterial);
+        const a = (i / 12) * Math.PI * 2;
+        const r = 1.5 + len / 2;
+        ray.position.set(Math.cos(a) * r, Math.sin(a) * r, 0);
+        ray.rotation.z = a - Math.PI / 2;
+        sunParts.push(ray);
+      }
+      sun.add(...sunParts);
+      scene.add(sun);
+    }
+
     // The ASCII pass over the whole canvas.
     const pass = asciiPass(target);
     const ascii = pass.material;
@@ -121,6 +146,7 @@ export default function HeroAscii({ mode = "intro", round = 0, onOver, onExit }:
       camera.lookAt(0, centreY, 0);
       camera.updateProjectionMatrix();
       camera.updateMatrixWorld();
+      placeSun(w, h);
       const at = (ndcX: number) => {
         const p = new THREE.Vector3(ndcX, 0, 0.5).unproject(camera).sub(camera.position).normalize();
         return camera.position.x + p.x * (-camera.position.z / p.z);
@@ -137,6 +163,24 @@ export default function HeroAscii({ mode = "intro", round = 0, onOver, onExit }:
       runner.layout(w, h, feet * h, share * h, gameX * w);
     };
     window.addEventListener("padfit", fit);
+    // The sun goes behind the Play button: its centre and size come from the button's sun slot.
+    function placeSun(w: number, h: number) {
+      const slot = el!.parentElement?.querySelector(".entry-sun-slot")?.getBoundingClientRect();
+      const box = el!.getBoundingClientRect();
+      if (!slot || !slot.width) { sun.visible = false; return; }
+      sun.visible = true;
+      const at = (px: number, py: number) => {
+        const ndc = new THREE.Vector3((px / w) * 2 - 1, 1 - (py / h) * 2, 0.5).unproject(camera).sub(camera.position).normalize();
+        const k = (-2 - camera.position.z) / ndc.z;
+        return camera.position.clone().addScaledVector(ndc, k);
+      };
+      const cx = slot.left + slot.width / 2 - box.left;
+      const cy = slot.top + slot.height / 2 - box.top;
+      const centre = at(cx, cy);
+      const edge = at(cx + slot.width / 2, cy);
+      sun.position.copy(centre);
+      sun.scale.setScalar(edge.distanceTo(centre) / 2.25);
+    }
     const resize = new ResizeObserver(fit);
     resize.observe(el);
     fit();
@@ -291,6 +335,7 @@ export default function HeroAscii({ mode = "intro", round = 0, onOver, onExit }:
           lift = 0;
           hero.position.y = 0;
           hero.scale.set(1, 1, 1);
+          squash = 1;
           hero.visible = true;
         }
         // The stage changes size as the page's texts go and come back; fit as it settles.
@@ -308,6 +353,8 @@ export default function HeroAscii({ mode = "intro", round = 0, onOver, onExit }:
       frame = requestAnimationFrame(tick);
       const dt = Math.min(clock.getDelta(), 1 / 20);
       mixer?.update(dt);
+      const hovered = !!el.parentElement?.querySelector(".entry-sun:hover");
+      sun.rotation.z -= dt * (hovered ? 0.9 : 0.15);
 
       if (mode === "intro") {
         // Running: the d-pad or keys, kept inside the stage.
@@ -316,8 +363,13 @@ export default function HeroAscii({ mode = "intro", round = 0, onOver, onExit }:
         if (held.has("KeyD") || held.has("ArrowRight")) input += 1;
         input = THREE.MathUtils.clamp(input, -1, 1);
         if (Math.abs(input) > 0.1) idleSince = now;
+        // Down on the d-pad, S or ↓: he crouches, and creeps at half speed.
+        const crouch = padInput.dpad.y > 0.5 || held.has("KeyS") || held.has("ArrowDown");
+        if (crouch) idleSince = now;
+        squash += ((crouch ? DUCK : 1) - squash) * Math.min(1, dt * 24);
+        hero.scale.set(1 + (1 - squash) * 0.4, squash, 1 + (1 - squash) * 0.4);
         const busy = oneShot && currentAction !== "jump";
-        const speed = busy ? 0 : input * RUN_SPEED;
+        const speed = busy ? 0 : input * RUN_SPEED * (crouch ? 0.5 : 1);
         hero.position.x = THREE.MathUtils.clamp(hero.position.x + speed * dt, edge.left, edge.right);
         const nowMoving = Math.abs(speed) > 0.2;
         if (Math.abs(input) > 0.1) facing = Math.sign(input);
@@ -415,6 +467,7 @@ export default function HeroAscii({ mode = "intro", round = 0, onOver, onExit }:
       stage?.removeEventListener("pointerdown", click);
       fire.dispose();
       mixer?.stopAllAction();
+      sunParts.forEach((m) => { m.geometry.dispose(); (m.material as THREE.Material).dispose(); });
       hero.traverse((node) => {
         const mesh = node as THREE.Mesh;
         if (!mesh.isMesh) return;
