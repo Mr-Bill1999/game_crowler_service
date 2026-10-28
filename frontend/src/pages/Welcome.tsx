@@ -12,9 +12,8 @@ const countParams = new URLSearchParams({ limit: "1" });
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("ru-RU", { day: "numeric", month: "long", timeZone: "UTC" }) : "—");
 
-/* The entrance in the light identity: one matte object in the middle, the Metacritic top 20 as
-   a strip at the bottom — the picked game is described on the right. The gamepad also drives
-   the ASCII hero under the headline. */
+/* The entrance in the light identity: a stage with an ASCII hero and a 3D gamepad that controls
+   him, the Metacritic top 20 as a strip at the bottom — the picked game is described on the right. */
 export function Welcome() {
   const top = useQuery({ queryKey: ["games", topParams.toString()], queryFn: () => api.games(topParams) });
   const count = useQuery({ queryKey: ["games", countParams.toString()], queryFn: () => api.games(countParams) });
@@ -65,18 +64,18 @@ export function Welcome() {
         <Link to="/games" className="entry-go">Галерея<Icon name="arrow-right" /></Link>
       </header>
 
-      <div className="entry-left">
-        <section className="entry-title">
+      {/* The stage: the ASCII hero across it, the headline over its top, the gamepad at its foot. */}
+      <section className="entry-stage">
+        <Suspense fallback={null}><HeroAscii /></Suspense>
+        <div className="entry-title">
           <h1>Твоя следующая.<br /><span>Любимая игра.</span></h1>
           <p>Сначала — оценки.<br />Потом — суть.</p>
-        </section>
-        <Suspense fallback={null}><HeroAscii /></Suspense>
-      </div>
-
-      <figure className={`entry-object ${live ? "is-live" : ""}`}>
-        <img src="/hero/pad-milk.webp" alt="" width="959" height="735" />
-        <Suspense fallback={null}><PadScene onReady={() => setLive(true)} /></Suspense>
-      </figure>
+        </div>
+        <figure className={`entry-object ${live ? "is-live" : ""}`}>
+          <img src="/hero/pad-front.webp" alt="" width="900" height="560" />
+          <Suspense fallback={null}><PadScene onReady={() => setLive(true)} /></Suspense>
+        </figure>
+      </section>
 
       <aside className="entry-panel" aria-live="polite">
         <p className="entry-panel-meta"><span>{pad2(picked + 1)} / {pad2(Math.max(games.length, 3))}</span><span>топ Metacritic</span></p>

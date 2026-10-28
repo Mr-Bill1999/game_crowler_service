@@ -5,7 +5,7 @@ import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.j
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { BUTTON_ACTION, padInput } from "./padInput";
 
-/* The entrance gamepad, live: drag it to turn it, press the face buttons and the d-pad, pull the
+/* The entrance gamepad, live but standing still: press the face buttons and the d-pad, pull the
    sticks. Everything springs back, and every press is passed on to padInput for the ASCII hero.
    The model comes from Blender (public/hero/pad.glb) with its parts as named nodes: Body,
    Btn_0..3, DPad (DPad_H, DPad_V), Stick_L/R, StickBase_L/R. The soft floor shadow is drawn
@@ -41,7 +41,6 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
   useEffect(() => {
     const el = host.current;
     if (!el) return;
-    const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     let renderer: THREE.WebGLRenderer;
     try {
@@ -94,10 +93,10 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
     loader.load(MODEL, (gltf) => {
       if (disposed) return;
       const model = gltf.scene;
-      // Centre the pad on its own bounds so it turns around its middle.
+      // Centre the pad on its own bounds.
       const box = new THREE.Box3().setFromObject(model);
       model.position.sub(box.getCenter(new THREE.Vector3()));
-      radius = box.getBoundingSphere(new THREE.Sphere()).radius * 1.15;
+      radius = box.getBoundingSphere(new THREE.Sphere()).radius * 0.8;
 
       for (const name of ["Btn_0", "Btn_1", "Btn_2", "Btn_3"]) {
         const node = model.getObjectByName(name);
@@ -120,13 +119,8 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
       ready.current?.();
     }, undefined, () => undefined);
 
-    // Turning: a world-space yaw and pitch on top of the resting pose, with inertia and a slow return.
-    const yaw = new Spring(26, 9);
-    const pitch = new Spring(26, 9);
-    let mode: "turn" | "stick" | "press" | null = null;
-    let last = { x: 0, y: 0 };
+    let mode: "stick" | "press" | null = null;
     let held: THREE.Object3D | null = null;
-    let idleSince = performance.now();
     const pointer = new THREE.Vector2();
     const ray = new THREE.Raycaster();
     const stickPlane = new THREE.Plane();
@@ -147,11 +141,9 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
 
     const down = (event: PointerEvent) => {
       const hit = pick(event);
-      if (!hit) return;
+      const target = part(hit?.object);
+      if (!hit || !target) return;
       try { renderer.domElement.setPointerCapture(event.pointerId); } catch { /* a pointer the browser no longer tracks */ }
-      last = { x: event.clientX, y: event.clientY };
-      idleSince = performance.now();
-      const target = part(hit.object);
       if (target && sticks.has(target)) {
         mode = "stick";
         held = target;
@@ -175,24 +167,15 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
           dpad.x.target = Math.sign(local.z) * 0.16;
           if (local.z < 0) padInput.act("jump");
         }
-      } else {
-        mode = "turn";
       }
-      el.dataset.grabbing = mode === "turn" ? "true" : "";
     };
 
     const move = (event: PointerEvent) => {
       if (!mode) {
-        const target = part(pick(event)?.object);
-        el.style.cursor = target ? "pointer" : pick(event) ? "grab" : "";
+        el.style.cursor = part(pick(event)?.object) ? "pointer" : "";
         return;
       }
-      idleSince = performance.now();
-      if (mode === "turn") {
-        yaw.target += (event.clientX - last.x) * 0.009;
-        pitch.target = THREE.MathUtils.clamp(pitch.target + (event.clientY - last.y) * 0.009, -1.1, 1.1);
-        last = { x: event.clientX, y: event.clientY };
-      } else if (mode === "stick" && held) {
+      if (mode === "stick" && held) {
         const stick = sticks.get(held)!;
         const rect = renderer.domElement.getBoundingClientRect();
         pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
@@ -216,8 +199,6 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
       if (held && dpad && held === dpad.node) { dpad.x.target = 0; dpad.z.target = 0; }
       mode = null;
       held = null;
-      idleSince = performance.now();
-      el.dataset.grabbing = "";
     };
 
     const canvas = renderer.domElement;
@@ -226,11 +207,7 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
     canvas.addEventListener("pointerup", up);
     canvas.addEventListener("pointercancel", up);
 
-    const qBase = new THREE.Quaternion().setFromEuler(BASE);
-    const qYaw = new THREE.Quaternion();
-    const qPitch = new THREE.Quaternion();
-    const Y = new THREE.Vector3(0, 1, 0);
-    const X = new THREE.Vector3(1, 0, 0);
+    root.quaternion.setFromEuler(BASE);
     let frame = 0;
     let then = performance.now();
 
@@ -238,15 +215,6 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
       frame = requestAnimationFrame(tick);
       const dt = Math.min((now - then) / 1000, 1 / 30);
       then = now;
-      // After a few quiet seconds the pad drifts back to its resting pose.
-      if (mode !== "turn" && now - idleSince > 2600) {
-        yaw.target *= 0.96;
-        pitch.target *= 0.96;
-      }
-      qYaw.setFromAxisAngle(Y, yaw.step(dt));
-      qPitch.setFromAxisAngle(X, pitch.step(dt));
-      root.quaternion.copy(qYaw).multiply(qPitch).multiply(qBase);
-      if (!calm) root.position.y = Math.sin(now / 1600) * 0.06;
 
       for (const p of presses.values()) p.node.position.y = p.rest - p.spring.step(dt) * 0.06;
       if (dpad) { dpad.node.rotation.x = dpad.x.step(dt); dpad.node.rotation.z = dpad.z.step(dt); }
