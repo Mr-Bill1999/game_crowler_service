@@ -5,20 +5,19 @@ import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.j
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { BUTTON_ACTION, padInput } from "./padInput";
 
-/* The entrance gamepad, live but standing still: press the face buttons and the d-pad, pull the
-   sticks. Everything springs back, and every press is passed on to padInput for the ASCII hero.
-   The model comes from Blender (public/hero/pad.glb) with its parts as named nodes: Body,
-   Btn_0..3, DPad (DPad_H, DPad_V), Stick_L/R, StickBase_L/R. The soft floor shadow is drawn
-   by the page, under the canvas. */
+/* The entrance gamepad, an old-console flat pad in one milky white, live but standing still:
+   press the face buttons and the d-pad. Everything springs back, and every press is passed on to
+   padInput for the ASCII hero. The model comes from Blender (public/hero/pad.glb) with its parts
+   as named nodes: Body, Btn_0..3, DPad (DPad_H, DPad_V). The soft floor shadow is drawn by the
+   page, under the canvas. */
 
 const MODEL = "/hero/pad.glb";
-// Facing the viewer: the face towards the camera, grips down, tipped back a little; on touch
-// screens almost straight on, so the buttons face the thumb.
-const BASE = new THREE.Euler(1.18, 0, 0, "YXZ");
-const BASE_TOUCH = new THREE.Euler(1.42, 0, 0, "YXZ");
+// Almost straight on, so the buttons face the viewer, tipped back just enough to read as an object;
+// on touch screens flatter still, under the thumb.
+const BASE = new THREE.Euler(1.34, 0, 0, "YXZ");
+const BASE_TOUCH = new THREE.Euler(1.44, 0, 0, "YXZ");
 /** How far from a finger a part still counts as tapped, in CSS pixels. */
 const TOUCH_REACH = 44;
-const STICK_MAX = 0.38;
 
 /** A damped spring towards a target; underdamped, so released parts wobble a little. */
 class Spring {
@@ -35,7 +34,6 @@ class Spring {
 }
 
 type Press = { node: THREE.Object3D; rest: number; spring: Spring };
-type Stick = { pivot: THREE.Object3D; mesh: THREE.Object3D; x: Spring; z: Spring; side: "left" | "right" };
 
 export default function PadScene({ onReady }: { onReady?: () => void }) {
   const host = useRef<HTMLDivElement>(null);
@@ -74,9 +72,24 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
 
     const touch = window.matchMedia("(pointer: coarse)").matches || window.innerWidth <= 720;
     const presses = new Map<THREE.Object3D, Press>();
-    const sticks = new Map<THREE.Object3D, Stick>();
     let dpad: { node: THREE.Object3D; x: Spring; z: Spring } | null = null;
     let radius = 2;
+    let model: THREE.Object3D | null = null;
+
+    // Tell the hero where the pad's top edge is on screen, so he stands right on it.
+    const publishTop = () => {
+      if (!model) return;
+      root.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(model);
+      let top = 1;
+      const p = new THREE.Vector3();
+      for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) {
+        p.set(x, y, z).project(camera);
+        top = Math.min(top, 0.5 - p.y * 0.5);
+      }
+      padInput.top = top;
+      window.dispatchEvent(new Event("padfit"));
+    };
 
     const fit = () => {
       const { clientWidth: w, clientHeight: h } = el;
@@ -88,6 +101,7 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
       camera.position.set(0, radius * 0.15, dist);
       camera.lookAt(0, 0, 0);
       camera.updateProjectionMatrix();
+      publishTop();
     };
     const resize = new ResizeObserver(fit);
     resize.observe(el);
@@ -97,7 +111,7 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
     let disposed = false;
     loader.load(MODEL, (gltf) => {
       if (disposed) return;
-      const model = gltf.scene;
+      model = gltf.scene;
       // Centre the pad on its own bounds.
       const box = new THREE.Box3().setFromObject(model);
       model.position.sub(box.getCenter(new THREE.Vector3()));
@@ -109,27 +123,15 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
       }
       const dp = model.getObjectByName("DPad");
       if (dp) dpad = { node: dp, x: new Spring(320, 16), z: new Spring(320, 16) };
-      for (const side of ["L", "R"]) {
-        const mesh = model.getObjectByName(`Stick_${side}`);
-        if (!mesh?.parent) continue;
-        // Tilt the stick around a point inside the body, below the cap.
-        const pivot = new THREE.Group();
-        pivot.position.copy(mesh.position).setY(mesh.position.y - 0.32);
-        mesh.parent.add(pivot);
-        pivot.attach(mesh);
-        sticks.set(mesh, { pivot, mesh, x: new Spring(150, 9), z: new Spring(150, 9), side: side === "L" ? "left" : "right" });
-      }
       root.add(model);
       fit();
       ready.current?.();
     }, undefined, () => undefined);
 
-    let mode: "stick" | "press" | null = null;
+    let pressing = false;
     let held: THREE.Object3D | null = null;
     const pointer = new THREE.Vector2();
     const ray = new THREE.Raycaster();
-    const stickPlane = new THREE.Plane();
-    const hitPoint = new THREE.Vector3();
 
     const pick = (event: PointerEvent) => {
       const rect = renderer.domElement.getBoundingClientRect();
@@ -139,7 +141,7 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
     };
     const part = (object: THREE.Object3D | undefined) => {
       for (let node = object; node; node = node.parent ?? undefined) {
-        if (presses.has(node) || sticks.has(node) || node === dpad?.node) return node;
+        if (presses.has(node) || node === dpad?.node) return node;
       }
       return null;
     };
@@ -148,7 +150,7 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
     // centre is nearest on screen within reach, and the tap's point on the plane of the pad's face.
     const nearest = (event: PointerEvent) => {
       const rect = renderer.domElement.getBoundingClientRect();
-      const nodes = [...presses.keys(), ...sticks.keys(), ...(dpad ? [dpad.node] : [])];
+      const nodes = [...presses.keys(), ...(dpad ? [dpad.node] : [])];
       let best: THREE.Object3D | null = null;
       let bestDist = TOUCH_REACH;
       const p = new THREE.Vector3();
@@ -174,23 +176,17 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
       }
       if (!target || !point) return;
       try { renderer.domElement.setPointerCapture(event.pointerId); } catch { /* a pointer the browser no longer tracks */ }
-      if (target && sticks.has(target)) {
-        mode = "stick";
-        held = target;
-        const stick = sticks.get(target)!;
-        const normal = new THREE.Vector3(0, 1, 0).transformDirection(stick.pivot.parent!.matrixWorld);
-        stickPlane.setFromNormalAndCoplanarPoint(normal, point);
-      } else if (target && presses.has(target)) {
-        mode = "press";
+      if (presses.has(target)) {
+        pressing = true;
         held = target;
         presses.get(target)!.spring.target = 1;
         const action = BUTTON_ACTION[target.name];
         if (action) padInput.act(action);
-      } else if (target && dpad && target === dpad.node) {
-        mode = "press";
+      } else if (dpad && target === dpad.node) {
+        pressing = true;
         held = target;
         const local = dpad.node.worldToLocal(point.clone());
-        // Left and right run while held; up jumps.
+        // Left and right run while held, down ducks while held; up jumps.
         if (Math.abs(local.x) > Math.abs(local.z)) {
           dpad.z.target = -Math.sign(local.x) * 0.16;
           padInput.dpad = { x: Math.sign(local.x), y: 0 };
@@ -203,33 +199,14 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
     };
 
     const move = (event: PointerEvent) => {
-      if (!mode) {
-        el.style.cursor = part(pick(event)?.object) ? "pointer" : "";
-        return;
-      }
-      if (mode === "stick" && held) {
-        const stick = sticks.get(held)!;
-        const rect = renderer.domElement.getBoundingClientRect();
-        pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
-        ray.setFromCamera(pointer, camera);
-        if (ray.ray.intersectPlane(stickPlane, hitPoint)) {
-          const local = stick.pivot.parent!.worldToLocal(hitPoint.clone()).sub(stick.pivot.position);
-          const pull = Math.min(1, Math.hypot(local.x, local.z) / 0.6);
-          const angle = Math.atan2(local.z, local.x);
-          stick.z.target = -Math.cos(angle) * pull * STICK_MAX;
-          stick.x.target = Math.sin(angle) * pull * STICK_MAX;
-          // Pad-local x runs right and z towards the grips, which faces down on screen.
-          padInput[stick.side] = { x: Math.cos(angle) * pull, y: Math.sin(angle) * pull };
-        }
-      }
+      if (!pressing) el.style.cursor = part(pick(event)?.object) ? "pointer" : "";
     };
 
     const up = (event: PointerEvent) => {
       if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
       if (held && presses.has(held)) presses.get(held)!.spring.target = 0;
-      if (held && sticks.has(held)) { const s = sticks.get(held)!; s.x.target = 0; s.z.target = 0; padInput[s.side] = { x: 0, y: 0 }; }
       if (held && dpad && held === dpad.node) { dpad.x.target = 0; dpad.z.target = 0; padInput.dpad = { x: 0, y: 0 }; }
-      mode = null;
+      pressing = false;
       held = null;
     };
 
@@ -250,12 +227,6 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
 
       for (const p of presses.values()) p.node.position.y = p.rest - p.spring.step(dt) * 0.06;
       if (dpad) { dpad.node.rotation.x = dpad.x.step(dt); dpad.node.rotation.z = dpad.z.step(dt); }
-      // The spring may overshoot; the stick itself never leaves its socket.
-      const limit = STICK_MAX * 1.05;
-      for (const s of sticks.values()) {
-        s.pivot.rotation.x = THREE.MathUtils.clamp(s.x.step(dt), -limit, limit);
-        s.pivot.rotation.z = THREE.MathUtils.clamp(s.z.step(dt), -limit, limit);
-      }
       renderer.render(scene, camera);
     };
     frame = requestAnimationFrame(tick);

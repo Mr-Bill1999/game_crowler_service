@@ -1,8 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Link } from "react-router-dom";
 import { api, type GameBrief } from "../api";
 import { Icon } from "../components/Icon";
+import type { Mode } from "../components/HeroAscii";
+import { SunAscii } from "../components/SunAscii";
+import { gameHud } from "../components/padInput";
 
 const PadScene = lazy(() => import("../components/PadScene"));
 const HeroAscii = lazy(() => import("../components/HeroAscii"));
@@ -10,6 +13,29 @@ const HeroAscii = lazy(() => import("../components/HeroAscii"));
 const topParams = new URLSearchParams({ top: "true", limit: "20" });
 const countParams = new URLSearchParams({ limit: "1" });
 const pad2 = (n: number) => String(n).padStart(2, "0");
+const BEST_KEY = "gg-run-best";
+const readBest = () => { try { return Number(localStorage.getItem(BEST_KEY)) || 0; } catch { return 0; } };
+const touchScreen = () => window.matchMedia("(pointer: coarse)").matches || window.innerWidth <= 720;
+
+const five = (n: number) => String(n).padStart(5, "0");
+
+/** Score and lives over the stage while the run is on, typed in the same ASCII as the game. */
+function RunHud({ best, onExit }: { best: number; onExit: () => void }) {
+  const hud = useSyncExternalStore(gameHud.subscribe, gameHud.get);
+  return (
+    <div className="run-hud">
+      <pre className="run-score">{"SCORE "}<b>{five(hud.score)}</b>{"\nHI    "}<span>{five(Math.max(best, hud.score))}</span></pre>
+      <div className="run-side">
+        <pre className="run-lives" aria-label={`Жизней: ${hud.lives}`}>{[0, 1, 2].map((i) => <b key={i} className={i < hud.lives ? "on" : ""}>{i < hud.lives ? "<3" : "</3"}</b>)}</pre>
+        <button type="button" className="run-key" onClick={onExit}>[esc] выйти</button>
+      </div>
+      <pre className="run-hint">{touchScreen()
+        ? "крестовина ^ прыжок  v пригнуться\nверхняя кнопка * огонь"
+        : "[space] прыжок   [s] пригнуться   [f] / клик огонь"}</pre>
+    </div>
+  );
+}
+
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("ru-RU", { day: "numeric", month: "long", timeZone: "UTC" }) : "—");
 
 /* The entrance in the light identity: a stage with an ASCII hero and a 3D gamepad that controls
@@ -22,6 +48,37 @@ export function Welcome() {
   const games = top.data?.items ?? [];
   const game: GameBrief | undefined = games[picked];
   const strip = useRef<HTMLDivElement>(null);
+  const [mode, setMode] = useState<Mode>("intro");
+  const [round, setRound] = useState(0);
+  const [best, setBest] = useState(readBest);
+  const [result, setResult] = useState<{ score: number; record: boolean } | null>(null);
+
+  const play = useCallback(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+    setResult(null);
+    setMode("play");
+    setRound((r) => r + 1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+  const exit = useCallback(() => { setMode("intro"); setResult(null); }, []);
+  const over = useCallback((score: number) => {
+    const record = score > readBest();
+    if (record) {
+      try { localStorage.setItem(BEST_KEY, String(score)); } catch { /* private mode */ }
+      setBest(score);
+    }
+    setResult({ score, record });
+    setMode("over");
+    return record;
+  }, []);
+
+  // On the game-over card: Enter or Space plays again.
+  useEffect(() => {
+    if (mode !== "over") return;
+    const key = (e: KeyboardEvent) => { if (e.code === "Enter" || e.code === "Space") { e.preventDefault(); play(); } };
+    const timer = setTimeout(() => window.addEventListener("keydown", key), 500);
+    return () => { clearTimeout(timer); window.removeEventListener("keydown", key); };
+  }, [mode, play]);
 
   // The strip turns with a vertical wheel too, and can be dragged.
   useEffect(() => {
@@ -54,7 +111,7 @@ export function Welcome() {
   }, []);
 
   return (
-    <div className="entry">
+    <div className={`entry ${mode !== "intro" ? "is-playing" : ""}`}>
       <header className="entry-head">
         <Link to="/" className="entry-mark">GameGallery</Link>
         <nav aria-label="Основная навигация">
@@ -66,12 +123,30 @@ export function Welcome() {
 
       {/* The stage: the ASCII hero across it, the headline over its top, the gamepad at its foot. */}
       <section className="entry-stage">
-        <Suspense fallback={null}><HeroAscii /></Suspense>
+        <Suspense fallback={null}><HeroAscii mode={mode} round={round} onOver={over} onExit={exit} /></Suspense>
+        {/* The sun of the scene is the Play button; in the run it stays up there as the sun. */}
+        <button type="button" className={`entry-sun ${mode !== "intro" ? "is-up" : ""}`} onClick={play} aria-label="Играть"
+          tabIndex={mode === "intro" ? 0 : -1}>
+          <SunAscii play={mode === "intro"} />
+          <span className="entry-sun-text">play{best ? ` · рекорд ${best}` : ""}</span>
+        </button>
+        {mode === "play" && <RunHud best={best} onExit={exit} />}
+        {mode === "over" && result && (
+          <div className="run-over" role="dialog" aria-label="Игра окончена">
+            <pre className="run-over-title">{result.record ? "* * *  NEW RECORD  * * *" : "-=  G A M E   O V E R  =-"}</pre>
+            <pre className="run-over-score">{five(result.score)}</pre>
+            {!result.record && <pre className="run-over-best">HI {five(best)}</pre>}
+            <div className="run-over-actions">
+              <button type="button" className="run-key run-again" onClick={play}>[enter] ещё раз</button>
+              <button type="button" className="run-key" onClick={exit}>[esc] выйти</button>
+            </div>
+          </div>
+        )}
         <div className="entry-title">
           <h1>Твоя следующая.<br /><span>Любимая игра.</span></h1>
         </div>
         <figure className={`entry-object ${live ? "is-live" : ""}`}>
-          <img src="/hero/pad-front.webp" alt="" width="900" height="560" />
+          <img src="/hero/pad-front.webp" alt="" width="900" height="408" />
           <Suspense fallback={null}><PadScene onReady={() => setLive(true)} /></Suspense>
         </figure>
       </section>
