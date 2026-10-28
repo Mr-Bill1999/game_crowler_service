@@ -66,19 +66,15 @@ img { max-width:100%; }
 .page { display:grid; gap:25px; max-width:1336px; margin:0 auto; padding:44px 28px 64px; }
 .page-head { display:flex; gap:15px; align-items:baseline; flex-wrap:wrap; }
 
-/* Entrance: the same real catalogue, presented as a seamless decorative reel. */
+/* Entrance: a looped 3D scene rendered in Blender, text on its dark left side. */
 .welcome-shell { display:flex; flex-direction:column; }
 .welcome-shell .topbar { position:absolute; inset:0 0 auto; border-bottom:0; background:transparent; }
 .welcome-shell>main { display:flex; flex:1; min-width:0; }
 .welcome { position:relative; display:flex; flex:1; flex-direction:column; min-width:0; min-height:100svh; }
 .welcome-scene { position:relative; isolation:isolate; overflow:hidden; display:grid; align-items:center; min-height:600px; flex:1; }
-.welcome-scene:after { content:""; position:absolute; inset:0; z-index:-1; background:#09090929; backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px); pointer-events:none; }
-.reel-wall { position:absolute; z-index:-2; top:50%; left:50%; max-width:none; display:grid; gap:20px; transform:translate(-50%,-50%) rotate(-15deg); transform-origin:center; opacity:.65; pointer-events:none; }
-.reel-track { position:relative; width:100%; overflow:hidden; contain:layout paint; }
-.reel-track .reel-tile { position:absolute; top:0; left:0; width:clamp(220px,21vw,310px); aspect-ratio:1.8; border:1px solid #72563d; border-radius:12px; background:#1b140e; animation:reel-card var(--reel-duration) linear infinite; will-change:transform; }
-.reel-track:nth-child(even) .reel-tile { animation-direction:reverse; }
-.reel-tile img { filter:saturate(.7) sepia(.1) brightness(.8); object-position:center 35%; }
-.reel-tile .cover-fallback { opacity:.3; }
+.welcome-video { position:absolute; inset:0; z-index:-2; width:100%; height:100%; object-fit:cover; object-position:72% center; background:#090909; pointer-events:none; }
+/* Keeps the text side of the scene dark; the 3D objects sit on the right. */
+.welcome-scene:after { content:""; position:absolute; inset:0; z-index:-1; background:linear-gradient(90deg,#090909 0%,#090909d9 28%,#09090900 58%),linear-gradient(0deg,#090909 0%,#09090900 22%); pointer-events:none; }
 .welcome-content { width:100%; max-width:1392px; margin:0 auto; padding:64px 56px; }
 .welcome-content h1 { font-size:clamp(48px,5.1vw,76px); line-height:1.13; letter-spacing:-.05em; margin:27px 0 28px; text-shadow:0 2px 26px #090909; }
 .welcome-content h1 .gradient-text { display:inline-block; text-shadow:none; }
@@ -90,9 +86,6 @@ img { max-width:100%; }
 .welcome-footer>span { display:flex; align-items:center; gap:8px; }
 .motion-control { display:inline-flex; align-items:center; gap:6px; border:0; background:transparent; padding:8px 0 8px 12px; color:#c4ab92; font-size:11px; }
 .motion-control .icon { width:14px; height:14px; }
-.is-paused .reel-tile { animation-play-state:paused; }
-/* Each card wraps independently, two card widths outside the clipped row. */
-@keyframes reel-card { from { transform:translateX(var(--reel-end)); } to { transform:translateX(var(--reel-start)); } }
 
 /* Shared controls and the existing score system. */
 .btn { display:inline-flex; justify-content:center; align-items:center; gap:9px; min-height:43px; padding:10px 17px; border:1px solid transparent; border-radius:9px; background:var(--ember); color:#28180c; text-decoration:none; font-size:13px; font-weight:500; transition:transform .16s,filter .16s,border-color .16s; }
@@ -324,7 +317,8 @@ select { min-height:42px; max-width:100%; padding:8px 12px; border:1px solid #44
   .welcome-content h1 { font-size:48px; }
   .welcome .eyebrow { font-size:9px; letter-spacing:1.2px; }
   .welcome-description { font-size:13px; }
-  .reel-tile { width:230px; aspect-ratio:1.7; }
+  .welcome-video { object-position:78% 30%; opacity:.6; }
+  .welcome-scene:after { background:linear-gradient(0deg,#090909 0%,#090909b3 45%,#09090933 100%); }
   .welcome-footer { padding:15px 20px 24px; }
   .catalog-head .eyebrow { font-size:9px; letter-spacing:.8px; }
   .catalog-head h1 { font-size:29px; }
@@ -394,7 +388,6 @@ select { min-height:42px; max-width:100%; padding:8px 12px; border:1px solid #44
   .welcome-actions .btn { font-size:12px; min-height:49px; }
   .welcome-footer { font-size:10px; padding-inline:20px; }
   .motion-control { font-size:10px; }
-  .reel-tile { width:210px; aspect-ratio:1.6; }
   .catalog-head h1 { font-size:27px; }
   .catalog-head .eyebrow { font-size:8px; }
   .catalog-head>p:last-child { font-size:11px; }
