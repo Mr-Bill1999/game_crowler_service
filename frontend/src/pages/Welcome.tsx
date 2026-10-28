@@ -69,7 +69,6 @@ export function Welcome() {
         <Suspense fallback={null}><HeroAscii /></Suspense>
         <div className="entry-title">
           <h1>Твоя следующая.<br /><span>Любимая игра.</span></h1>
-          <p>Сначала — оценки.<br />Потом — суть.</p>
         </div>
         <figure className={`entry-object ${live ? "is-live" : ""}`}>
           <img src="/hero/pad-front.webp" alt="" width="900" height="560" />

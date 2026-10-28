@@ -5,13 +5,12 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { padInput, type Action } from "./padInput";
 
 /* The entrance stage: a small rigged wizard from Blender (public/hero/hero.glb) rendered live
-   and drawn in ASCII like pencil on paper — the darker a cell, the denser its character. Winged
-   mobs fly in from the right and he fights them:
-   - fireball (pad top, F, a click on the stage — aimed at the click) knocks one down;
-   - dance (pad left, Q) is a spin attack close around him;
-   - wave (pad right, E) pushes every mob in front back;
-   - jump (pad bottom, Space/W/↑) lets a mob pass under him; otherwise a mob knocks him back.
-   The stick, the d-pad, A/D and ←/→ turn him. */
+   and drawn in ASCII like pencil on paper — the darker a cell, the denser its character. He
+   starts on top of the gamepad and runs along a dotted floor within the stage:
+   - run: the left stick, the d-pad left/right, A/D or ←/→ (he turns side-on while running);
+   - jump: pad bottom, d-pad up, Space, W or ↑ — also on the run;
+   - wave (pad right, E), dance (pad left, Q);
+   - fireball (pad top, F, or a click on the stage — thrown towards the click). */
 
 const MODEL = "/hero/hero.glb";
 const RAMP = " .:-=+*#%@";
@@ -20,11 +19,11 @@ const CELL_W = 6;
 const CELL_H = 11;
 const ATLAS_W = 32;
 const ATLAS_H = 56;
-const BURSTS = 4;
 const CLIPS: Record<Action, string> = { jump: "Hero_Jump", wave: "Hero_Wave", dance: "Hero_Dance", fireball: "Hero_Fireball" };
 const KEYS: Record<string, Action> = { Space: "jump", KeyW: "jump", ArrowUp: "jump", KeyF: "fireball", KeyE: "wave", KeyQ: "dance" };
 /** How tall the hero is, as a share of the stage height. */
 const HERO_H = 0.3;
+const RUN_SPEED = 2.8;
 
 const VERTEX = `
 varying vec2 vUv;
@@ -38,7 +37,7 @@ uniform vec2 uGrid;
 uniform vec2 uFire;
 uniform vec2 uFireDir;
 uniform float uFireOn;
-uniform vec3 uBursts[${BURSTS}];
+uniform vec3 uGround;
 uniform float uTime;
 varying vec2 vUv;
 
@@ -47,7 +46,6 @@ const float G = ${GLYPHS.length}.0;
 const float ASPECT = ${(CELL_H / CELL_W).toFixed(3)};
 const vec3 INK = vec3(0.133, 0.149, 0.122);
 const vec3 SAGE = vec3(0.486, 0.541, 0.439);
-const vec3 CLAY = vec3(0.62, 0.30, 0.20);
 const vec3 FIRE = vec3(0.71, 0.33, 0.18);
 const vec3 EMBER = vec3(0.85, 0.58, 0.31);
 
@@ -60,6 +58,11 @@ void main() {
   float glyphIndex = 0.0;
   vec3 ink = INK;
   float alpha = 0.0;
+
+  // The floor he runs on: a faint dotted line across the stage.
+  if (cell.y == uGround.x && cell.x >= uGround.y && cell.x <= uGround.z && mod(cell.x, 2.0) < 1.0) {
+    glyphIndex = 1.0; alpha = 0.45;
+  }
 
   if (scene.a > 0.35) {
     vec3 c = scene.rgb / max(scene.a, 0.001);
@@ -74,10 +77,9 @@ void main() {
       else if (dx == 0.0) glyphIndex = N + 1.0;
       else glyphIndex = dx * dy > 0.0 ? N + 3.0 : N + 2.0;
     }
-    // Colour by what is drawn: the sage hat, the terracotta mobs, ink for the rest.
     float hi = max(max(c.r, c.g), c.b);
     float sat = hi > 0.0 ? (hi - min(min(c.r, c.g), c.b)) / hi : 0.0;
-    ink = c.r > c.g * 1.2 && sat > 0.25 ? CLAY : mix(INK, SAGE, smoothstep(0.08, 0.2, sat));
+    ink = mix(INK, SAGE, smoothstep(0.08, 0.2, sat));
     alpha = 1.0;
   }
 
@@ -100,16 +102,6 @@ void main() {
     }
   }
 
-  // Bursts where a mob was hit: a ring of stars with a hot centre, fading out.
-  for (int i = 0; i < ${BURSTS}; i++) {
-    vec3 b = uBursts[i];
-    if (b.z < 0.0 || b.z > 0.7) continue;
-    float dist = length((cell - b.xy) * vec2(1.0, ASPECT));
-    float ring = 1.0 - smoothstep(0.0, 1.4, abs(dist - b.z * 26.0));
-    if (dist < 2.2 * (1.0 - b.z / 0.7)) { glyphIndex = N - 2.0; ink = FIRE; alpha = 1.0; }
-    else if (ring * step(0.5, hash(cell + float(i))) > 0.5) { glyphIndex = N - 4.0; ink = EMBER; alpha = 1.0 - b.z / 0.7; }
-  }
-
   float glyph = texture2D(uAtlas, vec2((glyphIndex + inCell.x) / G, inCell.y)).r;
   gl_FragColor = vec4(ink, glyph * alpha);
 }
@@ -130,40 +122,6 @@ async function atlas() {
   ctx.textBaseline = "middle";
   [...GLYPHS].forEach((ch, i) => ctx.fillText(ch, i * ATLAS_W + ATLAS_W / 2, ATLAS_H / 2 + 2));
   return canvas;
-}
-
-type Mob = { group: THREE.Group; wings: THREE.Object3D[]; speed: number; push: number; phase: number; baseY: number; passed: boolean };
-
-/** A winged slime: a terracotta body, two eyes, flapping wings. */
-function mobKit() {
-  const body = new THREE.SphereGeometry(0.3, 20, 14);
-  const eye = new THREE.SphereGeometry(0.075, 10, 8);
-  const wing = new THREE.BoxGeometry(0.46, 0.035, 0.24);
-  const clay = new THREE.MeshStandardMaterial({ color: 0xb4603d, roughness: 0.55 });
-  const wingClay = new THREE.MeshStandardMaterial({ color: 0x9a4c30, roughness: 0.6 });
-  const white = new THREE.MeshStandardMaterial({ color: 0xf2eee6, roughness: 0.4 });
-  const make = (): Mob => {
-    const group = new THREE.Group();
-    const b = new THREE.Mesh(body, clay);
-    b.scale.set(1.1, 0.95, 1);
-    group.add(b);
-    for (const x of [-0.11, 0.11]) {
-      const e = new THREE.Mesh(eye, white);
-      e.position.set(x, 0.06, 0.27);
-      group.add(e);
-    }
-    const wings = [-1, 1].map((side) => {
-      const pivot = new THREE.Group();
-      pivot.position.set(0.26 * side, 0.08, 0);
-      const w = new THREE.Mesh(wing, wingClay);
-      w.position.x = 0.22 * side;
-      pivot.add(w);
-      group.add(pivot);
-      return pivot;
-    });
-    return { group, wings, speed: 0, push: 0, phase: Math.random() * 6, baseY: 0, passed: false };
-  };
-  return { make, dispose: () => [body, eye, wing, clay, wingClay, white].forEach((x) => x.dispose()) };
 }
 
 export default function HeroAscii() {
@@ -204,7 +162,7 @@ export default function HeroAscii() {
         uFire: { value: new THREE.Vector2() },
         uFireDir: { value: new THREE.Vector2(1, 0) },
         uFireOn: { value: 0 },
-        uBursts: { value: Array.from({ length: BURSTS }, () => new THREE.Vector3(0, 0, -1)) },
+        uGround: { value: new THREE.Vector3(-1, 0, 0) },
         uTime: { value: 0 },
       },
     });
@@ -225,10 +183,15 @@ export default function HeroAscii() {
       ascii.uniforms.uAtlas.value = tex;
     });
 
-    // The hero stands on top of the gamepad (.entry-object, a sibling on the stage); a view offset
-    // keeps him there while the camera looks straight at him. The world's edges are where mobs
-    // come and go.
+    // The hero starts on top of the gamepad (.entry-object, a sibling on the stage); a view offset
+    // puts the world's origin there. He may run between the stage edges.
     const edge = { left: -4, right: 6 };
+    const tmp = new THREE.Vector3();
+    const toCell = (p: THREE.Vector3) => {
+      const grid = ascii.uniforms.uGrid.value as THREE.Vector2;
+      tmp.copy(p).project(camera);
+      return new THREE.Vector2((tmp.x * 0.5 + 0.5) * grid.x, (tmp.y * 0.5 + 0.5) * grid.y);
+    };
     const fit = () => {
       const w = el.clientWidth;
       const h = el.clientHeight;
@@ -258,22 +221,35 @@ export default function HeroAscii() {
         const p = new THREE.Vector3(ndcX, 0, 0.5).unproject(camera).sub(camera.position).normalize();
         return camera.position.x + p.x * (-camera.position.z / p.z);
       };
-      edge.left = at(-1);
-      edge.right = at(1);
+      edge.left = at(-1) + 0.5;
+      edge.right = at(1) - 0.5;
+      const from = toCell(new THREE.Vector3(edge.left - 0.3, 0, 0));
+      const to = toCell(new THREE.Vector3(edge.right + 0.3, 0, 0));
+      ascii.uniforms.uGround.value.set(Math.floor(from.y) - 1, Math.floor(from.x), Math.floor(to.x));
     };
     const resize = new ResizeObserver(fit);
     resize.observe(el);
     fit();
 
     let mixer: THREE.AnimationMixer | null = null;
-    let idle: THREE.AnimationAction | null = null;
     let current: THREE.AnimationAction | null = null;
+    let oneShot = false;
     let currentAction: Action | null = null;
-    let actionAt = 0;
     const actions = new Map<string, THREE.AnimationAction>();
     const hero = new THREE.Group();
     scene.add(hero);
     let hand: THREE.Object3D | undefined;
+    let moving = false;
+
+    // Idle or run, whichever fits the movement; one-shot actions play over it and hand back.
+    const base = () => actions.get(moving ? "Hero_Run" : "Hero_Idle") ?? null;
+    const settle = () => {
+      const next = base();
+      if (!next || next === current) return;
+      next.reset().play();
+      current?.crossFadeTo(next, 0.22, false);
+      current = next;
+    };
 
     const loader = new GLTFLoader();
     loader.setMeshoptDecoder(MeshoptDecoder);
@@ -284,39 +260,18 @@ export default function HeroAscii() {
       hand = gltf.scene.getObjectByName("HandL") ?? gltf.scene.getObjectByName("Hand.L");
       mixer = new THREE.AnimationMixer(gltf.scene);
       for (const clip of gltf.animations) actions.set(clip.name, mixer.clipAction(clip));
-      idle = actions.get("Hero_Idle") ?? null;
-      idle?.play();
-      current = idle;
+      current = actions.get("Hero_Idle") ?? null;
+      current?.play();
       mixer.addEventListener("finished", () => {
-        if (!idle || !current || current === idle) return;
-        idle.reset().play();
-        current.crossFadeTo(idle, 0.35, false);
-        current = idle;
+        oneShot = false;
         currentAction = null;
+        settle();
       });
     }, undefined, () => undefined);
 
-    // Combat state.
-    const kit = mobKit();
-    const mobs: Mob[] = [];
-    const bursts: { pos: THREE.Vector3; at: number }[] = [];
     let fire: { pos: THREE.Vector3; vel: THREE.Vector3 } | null = null;
     let firePending: { at: number; aim: THREE.Vector3 | null } | null = null;
-    let nextSpawn = performance.now() + 1500;
-    let knock = 0;
-
-    const burst = (pos: THREE.Vector3) => {
-      bursts.push({ pos: pos.clone(), at: performance.now() });
-      if (bursts.length > BURSTS) bursts.shift();
-    };
-    const drop = (mob: Mob) => {
-      scene.remove(mob.group);
-      mobs.splice(mobs.indexOf(mob), 1);
-    };
-    const kill = (mob: Mob) => {
-      burst(mob.group.getWorldPosition(new THREE.Vector3()));
-      drop(mob);
-    };
+    let facing = 1;
 
     const play = (action: Action, aim: THREE.Vector3 | null = null) => {
       const next = actions.get(CLIPS[action]);
@@ -325,29 +280,27 @@ export default function HeroAscii() {
       next.setLoop(THREE.LoopOnce, 1);
       next.clampWhenFinished = true;
       next.play();
-      if (current !== next) current.crossFadeTo(next, 0.18, false);
+      if (current !== next) current.crossFadeTo(next, 0.16, false);
       current = next;
+      oneShot = true;
       currentAction = action;
-      actionAt = performance.now();
-      if (action === "fireball") firePending = { at: actionAt + 650, aim };
-      if (action === "wave") for (const m of mobs) if (m.group.position.x < hero.position.x + 5) m.push = 4.5;
+      if (action === "fireball") firePending = { at: performance.now() + 650, aim };
     };
     const offAct = padInput.onAct((action) => play(action));
 
-    let yaw = 0;
-    let yawTarget = 0;
-    const turn = (step: number) => { yawTarget += step * (Math.PI / 2); };
-    const offTurn = padInput.onTurn(turn);
-
-    // Desktop: keys for every action; a click on the stage throws a fireball where it lands.
+    // Desktop: held keys run, single keys act; a click on the stage throws a fireball at it.
+    const held = new Set<string>();
     const keydown = (e: KeyboardEvent) => {
-      if (e.repeat || (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable]"))) return;
+      if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable]")) return;
+      if (["KeyA", "KeyD", "ArrowLeft", "ArrowRight"].includes(e.code)) { held.add(e.code); e.preventDefault(); return; }
       const action = KEYS[e.code];
-      if (action) { play(action); e.preventDefault(); return; }
-      if (e.code === "KeyA" || e.code === "ArrowLeft") { turn(-1); e.preventDefault(); }
-      if (e.code === "KeyD" || e.code === "ArrowRight") { turn(1); e.preventDefault(); }
+      if (action) { if (!e.repeat) play(action); e.preventDefault(); }
     };
+    const keyup = (e: KeyboardEvent) => held.delete(e.code);
+    const blur = () => held.clear();
     window.addEventListener("keydown", keydown);
+    window.addEventListener("keyup", keyup);
+    window.addEventListener("blur", blur);
     const stage = el.parentElement;
     const ray = new THREE.Raycaster();
     const ground = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
@@ -362,66 +315,43 @@ export default function HeroAscii() {
 
     const clock = new THREE.Clock();
     const handPos = new THREE.Vector3();
-    const tmp = new THREE.Vector3();
+    let yaw = 0;
     let frame = 0;
     const tick = (now: number) => {
       frame = requestAnimationFrame(tick);
       const dt = Math.min(clock.getDelta(), 1 / 20);
       mixer?.update(dt);
-      yaw += (yawTarget + padInput.left.x * 1.1 - yaw) * Math.min(1, dt * 6);
+
+      // Running: the strongest of stick, d-pad and keys, kept inside the stage.
+      let input = padInput.left.x + padInput.dpad.x;
+      if (held.has("KeyA") || held.has("ArrowLeft")) input -= 1;
+      if (held.has("KeyD") || held.has("ArrowRight")) input += 1;
+      input = THREE.MathUtils.clamp(input, -1, 1);
+      const busy = oneShot && currentAction !== "jump";
+      const speed = busy ? 0 : input * RUN_SPEED;
+      hero.position.x = THREE.MathUtils.clamp(hero.position.x + speed * dt, edge.left, edge.right);
+      const nowMoving = Math.abs(speed) > 0.2;
+      if (Math.abs(input) > 0.1) facing = Math.sign(input);
+      if (nowMoving !== moving) { moving = nowMoving; if (!oneShot) settle(); }
+      const run = actions.get("Hero_Run");
+      if (run) run.timeScale = 0.6 + Math.abs(input) * 0.6;
+      // Side-on while running, back to the viewer when he stops.
+      const yawTarget = moving ? facing * (Math.PI / 2) : 0;
+      yaw += (yawTarget - yaw) * Math.min(1, dt * 10);
       hero.rotation.y = yaw;
-      knock += (0 - knock) * Math.min(1, dt * 5);
-      hero.position.x = -knock;
 
-      // Mobs fly in from beyond the right edge at different heights.
-      if (now > nextSpawn && mobs.length < 4 && edge.right > 1) {
-        const mob = kit.make();
-        mob.baseY = 0.7 + Math.random() * 1.9;
-        mob.speed = 0.9 + Math.random() * 0.6;
-        mob.group.position.set(edge.right + 0.8, mob.baseY, (Math.random() - 0.5) * 0.6);
-        scene.add(mob.group);
-        mobs.push(mob);
-        nextSpawn = now + 1800 + Math.random() * 2200;
-      }
-      const airborne = currentAction === "jump" && now - actionAt > 180 && now - actionAt < 950;
-      const spinning = currentAction === "dance" && now - actionAt > 250 && now - actionAt < 2300;
-      for (const mob of [...mobs]) {
-        mob.phase += dt * 9;
-        mob.push = Math.max(0, mob.push - dt * 6);
-        const g = mob.group;
-        g.position.x += (-mob.speed + mob.push) * dt;
-        g.position.y = mob.baseY + Math.sin(mob.phase * 0.35) * 0.15;
-        g.rotation.z = Math.sin(mob.phase * 0.35) * 0.12;
-        mob.wings[0].rotation.z = Math.sin(mob.phase) * 0.7;
-        mob.wings[1].rotation.z = -Math.sin(mob.phase) * 0.7;
-        const dx = g.position.x - hero.position.x;
-        if (spinning && Math.abs(dx) < 1.7) { kill(mob); continue; }
-        if (!mob.passed && Math.abs(dx) < 0.45) {
-          if (airborne) mob.passed = true;
-          else { kill(mob); knock = 0.5; continue; }
-        }
-        if (g.position.x < edge.left - 1) drop(mob);
-      }
-
-      // The fireball leaves the throwing hand at the moment of release, towards the aim or right.
+      // The fireball leaves the throwing hand at the moment of release, towards the aim or ahead.
       if (firePending && now >= firePending.at && hand) {
         hand.getWorldPosition(handPos);
-        const dir = firePending.aim ? firePending.aim.clone().sub(handPos).setZ(0) : new THREE.Vector3(1, 0, 0);
-        if (dir.lengthSq() < 0.01) dir.set(1, 0, 0);
+        const dir = firePending.aim ? firePending.aim.clone().sub(handPos).setZ(0) : new THREE.Vector3(facing, 0, 0);
+        if (dir.lengthSq() < 0.01) dir.set(facing, 0, 0);
         fire = { pos: handPos.clone(), vel: dir.normalize().multiplyScalar(7) };
         firePending = null;
       }
-      const grid = ascii.uniforms.uGrid.value as THREE.Vector2;
-      const toCell = (p: THREE.Vector3) => {
-        tmp.copy(p).project(camera);
-        return new THREE.Vector2((tmp.x * 0.5 + 0.5) * grid.x, (tmp.y * 0.5 + 0.5) * grid.y);
-      };
       if (fire) {
         fire.pos.addScaledVector(fire.vel, dt);
-        const shot = fire;
-        const hit = mobs.find((m) => m.group.position.distanceTo(shot.pos) < 0.55);
-        if (hit) { kill(hit); fire = null; }
-        else if (shot.pos.x > edge.right + 1 || shot.pos.x < edge.left - 1 || shot.pos.y < -0.5 || shot.pos.y > 6) fire = null;
+        const p = fire.pos;
+        if (p.x > edge.right + 1.5 || p.x < edge.left - 1.5 || p.y < -0.3 || p.y > 6) fire = null;
       }
       ascii.uniforms.uFireOn.value = fire ? 1 : 0;
       if (fire) {
@@ -431,13 +361,6 @@ export default function HeroAscii() {
         ahead.y *= CELL_H / CELL_W;
         ascii.uniforms.uFireDir.value.copy(ahead.lengthSq() > 0 ? ahead.normalize() : new THREE.Vector2(1, 0));
       }
-      const slots = ascii.uniforms.uBursts.value as THREE.Vector3[];
-      slots.forEach((slot, i) => {
-        const b = bursts[i];
-        if (!b) { slot.z = -1; return; }
-        const c = toCell(b.pos);
-        slot.set(c.x, c.y, (now - b.at) / 1000);
-      });
       ascii.uniforms.uTime.value = now / 1000;
 
       renderer.setRenderTarget(target);
@@ -454,8 +377,9 @@ export default function HeroAscii() {
       cancelAnimationFrame(frame);
       resize.disconnect();
       offAct();
-      offTurn();
       window.removeEventListener("keydown", keydown);
+      window.removeEventListener("keyup", keyup);
+      window.removeEventListener("blur", blur);
       stage?.removeEventListener("pointerdown", click);
       mixer?.stopAllAction();
       hero.traverse((node) => {
@@ -464,7 +388,6 @@ export default function HeroAscii() {
         mesh.geometry.dispose();
         (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((m) => m.dispose());
       });
-      kit.dispose();
       quadGeometry.dispose();
       (ascii.uniforms.uAtlas.value as THREE.Texture | null)?.dispose();
       ascii.dispose();

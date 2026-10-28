@@ -160,11 +160,13 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
         mode = "press";
         held = target;
         const local = dpad.node.worldToLocal(hit.point.clone());
+        // Left and right run while held; up jumps.
         if (Math.abs(local.x) > Math.abs(local.z)) {
           dpad.z.target = -Math.sign(local.x) * 0.16;
-          padInput.turn(Math.sign(local.x));
+          padInput.dpad = { x: Math.sign(local.x), y: 0 };
         } else {
           dpad.x.target = Math.sign(local.z) * 0.16;
+          padInput.dpad = { x: 0, y: Math.sign(local.z) };
           if (local.z < 0) padInput.act("jump");
         }
       }
@@ -196,7 +198,7 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
       if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
       if (held && presses.has(held)) presses.get(held)!.spring.target = 0;
       if (held && sticks.has(held)) { const s = sticks.get(held)!; s.x.target = 0; s.z.target = 0; padInput[s.side] = { x: 0, y: 0 }; }
-      if (held && dpad && held === dpad.node) { dpad.x.target = 0; dpad.z.target = 0; }
+      if (held && dpad && held === dpad.node) { dpad.x.target = 0; dpad.z.target = 0; padInput.dpad = { x: 0, y: 0 }; }
       mode = null;
       held = null;
     };
