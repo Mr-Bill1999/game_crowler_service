@@ -12,8 +12,12 @@ import { BUTTON_ACTION, padInput } from "./padInput";
    by the page, under the canvas. */
 
 const MODEL = "/hero/pad.glb";
-// Facing the viewer: the face towards the camera, grips down, tipped back a little.
+// Facing the viewer: the face towards the camera, grips down, tipped back a little; on touch
+// screens almost straight on, so the buttons face the thumb.
 const BASE = new THREE.Euler(1.18, 0, 0, "YXZ");
+const BASE_TOUCH = new THREE.Euler(1.42, 0, 0, "YXZ");
+/** How far from a finger a part still counts as tapped, in CSS pixels. */
+const TOUCH_REACH = 44;
 const STICK_MAX = 0.38;
 
 /** A damped spring towards a target; underdamped, so released parts wobble a little. */
@@ -68,6 +72,7 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
     const root = new THREE.Group();
     scene.add(root);
 
+    const touch = window.matchMedia("(pointer: coarse)").matches || window.innerWidth <= 720;
     const presses = new Map<THREE.Object3D, Press>();
     const sticks = new Map<THREE.Object3D, Stick>();
     let dpad: { node: THREE.Object3D; x: Spring; z: Spring } | null = null;
@@ -96,7 +101,7 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
       // Centre the pad on its own bounds.
       const box = new THREE.Box3().setFromObject(model);
       model.position.sub(box.getCenter(new THREE.Vector3()));
-      radius = box.getBoundingSphere(new THREE.Sphere()).radius * 0.8;
+      radius = box.getBoundingSphere(new THREE.Sphere()).radius * (touch ? 0.66 : 0.8);
 
       for (const name of ["Btn_0", "Btn_1", "Btn_2", "Btn_3"]) {
         const node = model.getObjectByName(name);
@@ -139,17 +144,42 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
       return null;
     };
 
+    // A finger rarely lands on a small button exactly: without a direct hit, take the part whose
+    // centre is nearest on screen within reach, and the tap's point on the plane of the pad's face.
+    const nearest = (event: PointerEvent) => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      const nodes = [...presses.keys(), ...sticks.keys(), ...(dpad ? [dpad.node] : [])];
+      let best: THREE.Object3D | null = null;
+      let bestDist = TOUCH_REACH;
+      const p = new THREE.Vector3();
+      for (const node of nodes) {
+        node.getWorldPosition(p).project(camera);
+        const d = Math.hypot(rect.left + (p.x * 0.5 + 0.5) * rect.width - event.clientX, rect.top + (0.5 - p.y * 0.5) * rect.height - event.clientY);
+        if (d < bestDist) { bestDist = d; best = node; }
+      }
+      if (!best) return null;
+      const face = new THREE.Vector3(0, 1, 0).transformDirection(root.matrixWorld);
+      const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(face, best.getWorldPosition(new THREE.Vector3()));
+      const point = ray.ray.intersectPlane(plane, new THREE.Vector3()) ?? best.getWorldPosition(new THREE.Vector3());
+      return { target: best, point };
+    };
+
     const down = (event: PointerEvent) => {
       const hit = pick(event);
-      const target = part(hit?.object);
-      if (!hit || !target) return;
+      let target = part(hit?.object);
+      let point = hit?.point;
+      if (!target && event.pointerType !== "mouse") {
+        const near = nearest(event);
+        if (near) { target = near.target; point = near.point; }
+      }
+      if (!target || !point) return;
       try { renderer.domElement.setPointerCapture(event.pointerId); } catch { /* a pointer the browser no longer tracks */ }
       if (target && sticks.has(target)) {
         mode = "stick";
         held = target;
         const stick = sticks.get(target)!;
         const normal = new THREE.Vector3(0, 1, 0).transformDirection(stick.pivot.parent!.matrixWorld);
-        stickPlane.setFromNormalAndCoplanarPoint(normal, hit.point);
+        stickPlane.setFromNormalAndCoplanarPoint(normal, point);
       } else if (target && presses.has(target)) {
         mode = "press";
         held = target;
@@ -159,7 +189,7 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
       } else if (target && dpad && target === dpad.node) {
         mode = "press";
         held = target;
-        const local = dpad.node.worldToLocal(hit.point.clone());
+        const local = dpad.node.worldToLocal(point.clone());
         // Left and right run while held; up jumps.
         if (Math.abs(local.x) > Math.abs(local.z)) {
           dpad.z.target = -Math.sign(local.x) * 0.16;
@@ -209,7 +239,7 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
     canvas.addEventListener("pointerup", up);
     canvas.addEventListener("pointercancel", up);
 
-    root.quaternion.setFromEuler(BASE);
+    root.quaternion.setFromEuler(touch ? BASE_TOUCH : BASE);
     let frame = 0;
     let then = performance.now();
 

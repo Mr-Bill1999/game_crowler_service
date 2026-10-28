@@ -133,15 +133,15 @@ function fireOverlay() {
       ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
       drawn = false;
       if (!shot) return;
-      shot.x += shot.dx * 1100 * dt;
-      shot.y += shot.dy * 1100 * dt;
+      shot.x += shot.dx * 480 * dt;
+      shot.y += shot.dy * 480 * dt;
       const margin = 160;
       if (shot.x < -margin || shot.y < -margin || shot.x > window.innerWidth + margin || shot.y > window.innerHeight + margin) { shot = null; return; }
       ctx.font = font;
       ctx.textBaseline = "middle";
       const hx = shot.x / CELL_W;
       const hy = shot.y / CELL_H;
-      const tick = Math.floor(now / 55);
+      const tick = Math.floor(now / 110);
       // Every cell around the head and along the tail, snapped to the grid, picks its glyph.
       for (let cy = Math.floor(hy) - 6; cy <= Math.ceil(hy) + 6; cy++) {
         for (let cx = Math.floor(hx) - 24; cx <= Math.ceil(hx) + 24; cx++) {
@@ -247,7 +247,9 @@ export default function HeroAscii() {
       const box = el.getBoundingClientRect();
       const pad = el.parentElement?.querySelector(".entry-object")?.getBoundingClientRect();
       const heroX = pad ? Math.min(0.85, Math.max(0.15, (pad.left + pad.width / 2 - box.left) / w)) : 0.5;
-      const feet = pad ? Math.min(0.95, (pad.top + pad.height * 0.2 - box.top) / h) : 0.95;
+      // The pad stands almost straight on on touch screens, so its top edge sits higher in its box.
+      const touch = window.matchMedia("(pointer: coarse)").matches || window.innerWidth <= 720;
+      const feet = pad ? Math.min(0.95, (pad.top + pad.height * (touch ? 0.12 : 0.2) - box.top) / h) : 0.95;
       const full = w * 2 * Math.max(heroX, 1 - heroX);
       camera.aspect = full / h;
       camera.setViewOffset(full, h, full / 2 - heroX * w, 0, w, h);

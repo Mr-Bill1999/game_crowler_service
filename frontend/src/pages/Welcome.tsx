@@ -96,7 +96,7 @@ export function Welcome() {
             <button key={item.slug} role="tab" aria-selected={i === picked} className={i === picked ? "active" : ""}
               onClick={() => { if (!strip.current?.dataset.dragged) setPicked(i); }}>
               <span className="entry-thumb">{item.cover_url && <img src={item.cover_url} alt="" loading="lazy" onError={(e) => { e.currentTarget.hidden = true; }} />}</span>
-              <span><small>{pad2(i + 1)}</small>{item.title}</span>
+              <span className="entry-pick-text"><small>{pad2(i + 1)}</small><span className="entry-pick-title">{item.title}</span></span>
             </button>
           ))}
         </div>
