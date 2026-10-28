@@ -140,7 +140,9 @@ img { max-width:100%; }
 .companion-off { position:absolute; right:-18px; top:-6px; width:20px; height:20px; padding:0; border:1px solid var(--line); border-radius:50%; background:var(--surface); color:var(--muted); font:400 12px/1 var(--f-mono); cursor:pointer; opacity:0; transition:opacity .2s,color .2s; }
 .companion-ui:hover .companion-off,.companion-off:focus-visible { opacity:1; }
 .companion-off:hover { color:var(--ink); }
-@media (max-width:720px) { .companion { width:96px; height:128px; right:4px; } }
+.companion.is-reading { width:270px; height:160px; }
+.companion.is-reading .companion-ui { left:12%; right:12%; top:20%; }
+@media (max-width:720px) { .companion { width:96px; height:128px; right:4px; } .companion.is-reading { width:190px; height:100px; } }
 @media (hover:none) { .companion-off { opacity:.7; } }
 
 /* The arcade run: every text leaves, the stage takes the page, the pad stays as the controller. */

@@ -58,7 +58,7 @@ export function GamesList() {
   return (
     <div className="page catalog-page">
       <div className="page-head catalog-head">
-        <h1>{top ? "Топ Metacritic." : "Каталог."}<sup>{games.data ? games.data.total.toLocaleString("ru-RU") : ""}</sup></h1>
+        <h1>{top ? "Топ Metacritic" : "Каталог"}<sup>{games.data ? games.data.total.toLocaleString("ru-RU") : ""}</sup></h1>
       </div>
 
       <div className="toolbar">

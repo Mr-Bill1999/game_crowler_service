@@ -23,6 +23,9 @@ function Shell() {
 
   useEffect(() => { window.scrollTo(0, 0); }, [location.pathname]);
   const [companion, setCompanion] = useState(false);
+  // On the catalog the wizard reads, on the Metacritic top he dances.
+  const catalog = location.pathname === "/games" || legacyCatalog;
+  const pose = catalog ? (params.has("top") ? "dance" : "read") : "stand";
   useEffect(() => {
     if (welcome || companion) return;
     const timer = setTimeout(() => setCompanion(true), 1200);
@@ -48,7 +51,7 @@ function Shell() {
           <Route path="/devpanel" element={<DevPanel />} />
         </Routes>
       </main>
-      {companion && !welcome && <Suspense fallback={null}><Companion path={location.pathname + location.search} /></Suspense>}
+      {companion && !welcome && <Suspense fallback={null}><Companion path={location.pathname + location.search} pose={pose} /></Suspense>}
     </div>
   );
 }
