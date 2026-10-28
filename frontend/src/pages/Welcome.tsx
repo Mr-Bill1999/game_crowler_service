@@ -5,6 +5,7 @@ import { api, type GameBrief } from "../api";
 import { Icon } from "../components/Icon";
 
 const PadScene = lazy(() => import("../components/PadScene"));
+const HeroAscii = lazy(() => import("../components/HeroAscii"));
 
 const topParams = new URLSearchParams({ top: "true", limit: "3" });
 const countParams = new URLSearchParams({ limit: "1" });
@@ -12,7 +13,8 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("ru-RU", { day: "numeric", month: "long", timeZone: "UTC" }) : "—");
 
 /* The entrance in the light identity: one matte object in the middle, the week's top three
-   from the catalogue as a small collection — picked at the bottom, described on the right. */
+   from the catalogue as a small collection — picked at the bottom, described on the right.
+   The gamepad also drives the ASCII hero in the background. */
 export function Welcome() {
   const top = useQuery({ queryKey: ["games", topParams.toString()], queryFn: () => api.games(topParams) });
   const count = useQuery({ queryKey: ["games", countParams.toString()], queryFn: () => api.games(countParams) });
@@ -32,15 +34,18 @@ export function Welcome() {
         <Link to="/games" className="entry-go">Галерея<Icon name="arrow-right" /></Link>
       </header>
 
-      <section className="entry-title">
-        <h1>Твоя следующая.<br /><span>Любимая игра.</span></h1>
-        <p>Сначала — оценки.<br />Потом — суть.</p>
-      </section>
+      <div className="entry-left">
+        <section className="entry-title">
+          <h1>Твоя следующая.<br /><span>Любимая игра.</span></h1>
+          <p>Сначала — оценки.<br />Потом — суть.</p>
+        </section>
+        <Suspense fallback={null}><HeroAscii /></Suspense>
+      </div>
 
       <figure className={`entry-object ${live ? "is-live" : ""}`}>
         <img src="/hero/pad-milk.webp" alt="" width="959" height="735" />
         <Suspense fallback={null}><PadScene onReady={() => setLive(true)} /></Suspense>
-        <figcaption>Вращайте мышью · нажимайте кнопки · тяните стики</figcaption>
+        <figcaption>Кнопки — действия героя · стик и крестовина — поворот · корпус — вращать</figcaption>
       </figure>
 
       <p className="entry-note"><small>01 — Топ недели</small>Лучшие новинки<br />по оценкам критиков.</p>

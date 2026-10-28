@@ -3,14 +3,17 @@ import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { BUTTON_ACTION, padInput } from "./padInput";
 
 /* The entrance gamepad, live: drag it to turn it, press the face buttons and the d-pad, pull the
-   sticks. Everything springs back. The model comes from Blender (public/hero/pad.glb) with its
-   parts as named nodes: Body, Btn_0..3, DPad (DPad_H, DPad_V), Stick_L/R, StickBase_L/R.
-   The soft floor shadow is drawn by the page, under the canvas. */
+   sticks. Everything springs back, and every press is passed on to padInput for the ASCII hero.
+   The model comes from Blender (public/hero/pad.glb) with its parts as named nodes: Body,
+   Btn_0..3, DPad (DPad_H, DPad_V), Stick_L/R, StickBase_L/R. The soft floor shadow is drawn
+   by the page, under the canvas. */
 
 const MODEL = "/hero/pad.glb";
-const BASE = new THREE.Euler(1.02, -0.42, 0.3, "YXZ");
+// Facing the viewer: the face towards the camera, grips down, tipped back a little.
+const BASE = new THREE.Euler(1.18, 0, 0, "YXZ");
 const STICK_MAX = 0.38;
 
 /** A damped spring towards a target; underdamped, so released parts wobble a little. */
@@ -28,7 +31,7 @@ class Spring {
 }
 
 type Press = { node: THREE.Object3D; rest: number; spring: Spring };
-type Stick = { pivot: THREE.Object3D; mesh: THREE.Object3D; x: Spring; z: Spring };
+type Stick = { pivot: THREE.Object3D; mesh: THREE.Object3D; x: Spring; z: Spring; side: "left" | "right" };
 
 export default function PadScene({ onReady }: { onReady?: () => void }) {
   const host = useRef<HTMLDivElement>(null);
@@ -94,7 +97,7 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
       // Centre the pad on its own bounds so it turns around its middle.
       const box = new THREE.Box3().setFromObject(model);
       model.position.sub(box.getCenter(new THREE.Vector3()));
-      radius = box.getBoundingSphere(new THREE.Sphere()).radius * 0.8;
+      radius = box.getBoundingSphere(new THREE.Sphere()).radius * 1.15;
 
       for (const name of ["Btn_0", "Btn_1", "Btn_2", "Btn_3"]) {
         const node = model.getObjectByName(name);
@@ -110,7 +113,7 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
         pivot.position.copy(mesh.position).setY(mesh.position.y - 0.32);
         mesh.parent.add(pivot);
         pivot.attach(mesh);
-        sticks.set(mesh, { pivot, mesh, x: new Spring(150, 9), z: new Spring(150, 9) });
+        sticks.set(mesh, { pivot, mesh, x: new Spring(150, 9), z: new Spring(150, 9), side: side === "L" ? "left" : "right" });
       }
       root.add(model);
       fit();
@@ -159,12 +162,19 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
         mode = "press";
         held = target;
         presses.get(target)!.spring.target = 1;
+        const action = BUTTON_ACTION[target.name];
+        if (action) padInput.act(action);
       } else if (target && dpad && target === dpad.node) {
         mode = "press";
         held = target;
         const local = dpad.node.worldToLocal(hit.point.clone());
-        if (Math.abs(local.x) > Math.abs(local.z)) dpad.z.target = -Math.sign(local.x) * 0.16;
-        else dpad.x.target = Math.sign(local.z) * 0.16;
+        if (Math.abs(local.x) > Math.abs(local.z)) {
+          dpad.z.target = -Math.sign(local.x) * 0.16;
+          padInput.turn(Math.sign(local.x));
+        } else {
+          dpad.x.target = Math.sign(local.z) * 0.16;
+          if (local.z < 0) padInput.act("jump");
+        }
       } else {
         mode = "turn";
       }
@@ -193,6 +203,8 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
           const angle = Math.atan2(local.z, local.x);
           stick.z.target = -Math.cos(angle) * pull * STICK_MAX;
           stick.x.target = Math.sin(angle) * pull * STICK_MAX;
+          // Pad-local x runs right and z towards the grips, which faces down on screen.
+          padInput[stick.side] = { x: Math.cos(angle) * pull, y: Math.sin(angle) * pull };
         }
       }
     };
@@ -200,7 +212,7 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
     const up = (event: PointerEvent) => {
       if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
       if (held && presses.has(held)) presses.get(held)!.spring.target = 0;
-      if (held && sticks.has(held)) { const s = sticks.get(held)!; s.x.target = 0; s.z.target = 0; }
+      if (held && sticks.has(held)) { const s = sticks.get(held)!; s.x.target = 0; s.z.target = 0; padInput[s.side] = { x: 0, y: 0 }; }
       if (held && dpad && held === dpad.node) { dpad.x.target = 0; dpad.z.target = 0; }
       mode = null;
       held = null;
