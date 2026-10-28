@@ -1,6 +1,4 @@
-import { useState } from "react";
 import type { GameDetail, GameProfile, ProfileFactor } from "../api";
-import { Clamp } from "./Fold";
 
 const FACTORS: Record<string, { name: string; question: string }> = {
   "1": { name: "Ключевая идентичность", question: "Какую роль и опыт предлагает игра, что обязано сохраниться" },
@@ -36,18 +34,17 @@ export function ProfileBlock({ g }: { g: GameDetail }) {
   const p = g.profile;
   if (!p) {
     return (
-      <section id="profile" className="block placeholder profile-block">
+      <section className="block placeholder profile-block">
         <h2>Профиль игры</h2>
         <p>Данные об игре с других платформ ещё собираются. Профиль появится, когда их будет достаточно.</p>
       </section>
     );
   }
   return (
-    <section id="profile" className="block profile-block" aria-labelledby="profile-title">
+    <section className="block profile-block" aria-labelledby="profile-title">
       <div className="profile-head">
         <h2 id="profile-title">Профиль игры</h2>
         <span className={`band band-${p.band}`}>{p.band_label}</span>
-        <span className="muted small mono">{p.fullness} из 100</span>
       </div>
       {p.profile ? (
         <div className="factor-grid">
@@ -73,22 +70,20 @@ function FactorCard({ id, meta, factor, p }: {
   p: GameProfile;
 }) {
   const score = p.factors[id]?.score ?? 0;
-  const [open, setOpen] = useState(false);
-  const points = factor?.points.length ?? 0;
   return (
     <article className={`factor${factor?.confidence === "low" ? " factor-low" : ""}`}>
-      <header title={meta.question}>
+      <header>
         <span className="factor-num mono">{id}</span>
-        <h3>{meta.name}</h3>
-        <span className={`confidence conf-${factor?.confidence ?? "low"}`} title={`${CONFIDENCE[factor?.confidence ?? "low"]} · покрытие ${score} из 100`} />
+        <div>
+          <h3>{meta.name}</h3>
+          <p className="muted small">{meta.question}</p>
+        </div>
+        <span className={`confidence conf-${factor?.confidence ?? "low"}`} title={`Покрытие фактора: ${score} из 100`}>
+          {CONFIDENCE[factor?.confidence ?? "low"]}
+        </span>
       </header>
-      {factor?.summary && <Clamp lines={3}><p>{factor.summary}</p></Clamp>}
-      {points > 0 && (
-        <button type="button" className="link-btn" onClick={() => setOpen(!open)}>
-          {open ? "скрыть доказательства" : `доказательства · ${points}`}
-        </button>
-      )}
-      {open && !!factor?.points.length && (
+      {factor?.summary && <p>{factor.summary}</p>}
+      {!!factor?.points.length && (
         <ul>
           {factor.points.map((pt, i) => (
             <li key={i}>
@@ -136,8 +131,7 @@ function Sources({ ids, p }: { ids: number[]; p: GameProfile }) {
 function Fullness({ p }: { p: GameProfile }) {
   const sources = Object.entries(p.sources).sort((a, b) => b[1].evidence - a[1].evidence);
   return (
-    <details className="fullness more" aria-label={`Наполненность ${p.fullness} из 100`}>
-      <summary>Наполненность {p.fullness} из 100 · по факторам и источникам</summary>
+    <div className="fullness" aria-label={`Наполненность ${p.fullness} из 100`}>
       <div className="fullness-top">
         <div>
           <h3>Наполненность</h3>
@@ -224,6 +218,6 @@ function Fullness({ p }: { p: GameProfile }) {
         {p.profiled_at && ` · профиль ${new Date(p.profiled_at).toLocaleString("ru-RU")}`}
         {p.model && ` · ${p.model}`}
       </p>
-    </details>
+    </div>
   );
 }
