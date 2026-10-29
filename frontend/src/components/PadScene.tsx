@@ -20,18 +20,24 @@ const BASE_TOUCH = new THREE.Euler(1.44, 0, 0, "YXZ");
 /** How far from a finger a part still counts as tapped, in CSS pixels. */
 const TOUCH_REACH = 44;
 
-/** A damped spring towards a target; underdamped, so released parts wobble a little. */
+/** A damped spring towards a target; underdamped, so released parts wobble a little. It counts as resting once
+   the motion left is below what the eye can see (`eps`, in its own units), and then lands exactly on the target:
+   every frame a part springs is a full redraw of the pad. */
 class Spring {
   value = 0;
   target = 0;
   private velocity = 0;
-  constructor(private stiffness = 180, private damping = 14) {}
+  constructor(private stiffness = 180, private damping = 14, private eps = 1e-3) {}
   step(dt: number) {
     this.velocity += ((this.target - this.value) * this.stiffness - this.velocity * this.damping) * dt;
     this.value += this.velocity * dt;
+    if (Math.abs(this.target - this.value) < this.eps && Math.abs(this.velocity) < this.eps * 25) {
+      this.value = this.target;
+      this.velocity = 0;
+    }
     return this.value;
   }
-  get resting() { return Math.abs(this.target - this.value) < 1e-4 && Math.abs(this.velocity) < 1e-3; }
+  get resting() { return this.value === this.target && this.velocity === 0; }
 }
 
 type Press = { node: THREE.Object3D; rest: number; spring: Spring };
@@ -133,10 +139,10 @@ export default function PadScene({ onReady, inspect = false }: { onReady?: () =>
 
       for (const name of ["Btn_0", "Btn_1", "Btn_2", "Btn_3"]) {
         const node = model.getObjectByName(name);
-        if (node) presses.set(node, { node, rest: node.position.y, spring: new Spring(420, 22) });
+        if (node) presses.set(node, { node, rest: node.position.y, spring: new Spring(420, 22, 0.02) });
       }
       const dp = model.getObjectByName("DPad");
-      if (dp) dpad = { node: dp, x: new Spring(320, 16), z: new Spring(320, 16) };
+      if (dp) dpad = { node: dp, x: new Spring(320, 16, 0.005), z: new Spring(320, 16, 0.005) };
       root.add(model);
       fit();
       dirty = true;
@@ -258,6 +264,7 @@ export default function PadScene({ onReady, inspect = false }: { onReady?: () =>
     root.quaternion.copy(baseQ);
     let frame = 0;
     let then = performance.now();
+    let drawn = 0;
 
     const tick = (now: number) => {
       frame = requestAnimationFrame(tick);
@@ -284,7 +291,11 @@ export default function PadScene({ onReady, inspect = false }: { onReady?: () =>
         moving = true;
       }
       if (!moving && !dirty) return;
+      // In the game the pad only answers taps: 30 fps is enough for a button going down, and leaves the GPU to
+      // the run. The frame skipped here is drawn on the next one.
+      if (!inspectRef.current && now - drawn < 1000 / 30 - 4) { dirty = true; return; }
       dirty = false;
+      drawn = now;
       renderer.render(scene, camera);
     };
     frame = requestAnimationFrame(tick);
