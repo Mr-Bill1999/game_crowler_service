@@ -14,7 +14,8 @@ const countParams = new URLSearchParams({ limit: "1" });
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const BEST_KEY = "gg-run-best";
 const readBest = () => { try { return Number(localStorage.getItem(BEST_KEY)) || 0; } catch { return 0; } };
-const touchScreen = () => window.matchMedia("(pointer: coarse)").matches || window.innerWidth <= 720;
+/** A finger, not a mouse: decides how the run is played (pad or keycaps), whatever the width. */
+const touchScreen = () => window.matchMedia("(pointer: coarse)").matches || window.matchMedia("(hover: none)").matches;
 
 const five = (n: number) => String(n).padStart(5, "0");
 
@@ -28,9 +29,44 @@ function RunHud({ best, onExit }: { best: number; onExit: () => void }) {
         <pre className="run-lives" aria-label={`Жизней: ${hud.lives}`}>{[0, 1, 2].map((i) => <b key={i} className={i < hud.lives ? "on" : ""}>{i < hud.lives ? "<3" : "</3"}</b>)}</pre>
         <button type="button" className="run-key" onClick={onExit}>[esc] выйти</button>
       </div>
-      <pre className="run-hint">{touchScreen()
-        ? "крестовина ^ прыжок  v пригнуться\nверхняя кнопка * огонь"
-        : "[space] прыжок   [s] пригнуться   [f] / клик огонь"}</pre>
+      {touchScreen() && <pre className="run-hint">{"крестовина ^ прыжок  v пригнуться\nверхняя кнопка * огонь"}</pre>}
+    </div>
+  );
+}
+
+/* On a computer the run is played on the keyboard, so the pad gives way to keycaps: W jumps,
+   A and D step, S ducks, R fires. They light up as they are pressed, and a click on one presses
+   it too. */
+const KEYCAPS = [
+  { key: "w", label: "W", hint: "прыжок", codes: ["KeyW", "ArrowUp", "Space"] },
+  { key: "a", label: "A", hint: "назад", codes: ["KeyA", "ArrowLeft"] },
+  { key: "s", label: "S", hint: "пригнуться", codes: ["KeyS", "ArrowDown"] },
+  { key: "d", label: "D", hint: "вперёд", codes: ["KeyD", "ArrowRight"] },
+  { key: "r", label: "R", hint: "огонь", codes: ["KeyR", "KeyF"] },
+] as const;
+
+function RunKeys() {
+  const [down, setDown] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => setDown((d) => (d.has(e.code) ? d : new Set(d).add(e.code)));
+    const off = (e: KeyboardEvent) => setDown((d) => { if (!d.has(e.code)) return d; const n = new Set(d); n.delete(e.code); return n; });
+    const clear = () => setDown(new Set());
+    window.addEventListener("keydown", on);
+    window.addEventListener("keyup", off);
+    window.addEventListener("blur", clear);
+    return () => { window.removeEventListener("keydown", on); window.removeEventListener("keyup", off); window.removeEventListener("blur", clear); };
+  }, []);
+  const press = (code: string, type: "keydown" | "keyup") => window.dispatchEvent(new KeyboardEvent(type, { code }));
+  return (
+    <div className="run-keys" aria-label="Управление: W — прыжок, A и D — шаг, S — пригнуться, R — огонь">
+      {KEYCAPS.map((k) => (
+        <button key={k.key} type="button" tabIndex={-1} className={`keycap key-${k.key} ${k.codes.some((c) => down.has(c)) ? "is-down" : ""}`}
+          onPointerDown={(e) => { e.preventDefault(); press(k.codes[0], "keydown"); }}
+          onPointerUp={() => press(k.codes[0], "keyup")} onPointerLeave={() => press(k.codes[0], "keyup")}>
+          <b>{k.label}</b>
+          <small>{k.hint}</small>
+        </button>
+      ))}
     </div>
   );
 }
@@ -48,6 +84,8 @@ export function Welcome() {
   const game: GameBrief | undefined = games[picked];
   const strip = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<Mode>("intro");
+  // The device decides how the run is played: keycaps on a computer, the pad on a phone.
+  const [touch] = useState(touchScreen);
   const [round, setRound] = useState(0);
   const [best, setBest] = useState(readBest);
   const [result, setResult] = useState<{ score: number; record: boolean } | null>(null);
@@ -110,7 +148,7 @@ export function Welcome() {
   }, []);
 
   return (
-    <div className={`entry ${mode !== "intro" ? "is-playing" : ""}`}>
+    <div className={`entry ${mode !== "intro" ? "is-playing" : ""} ${touch ? "is-touch" : "is-desk"}`}>
       <header className="entry-head">
         <Link to="/" className="entry-mark">GameGallery</Link>
         <nav aria-label="Основная навигация">
@@ -147,7 +185,8 @@ export function Welcome() {
         </div>
         <figure className={`entry-object ${live ? "is-live" : ""}`}>
           <img src="/hero/pad-front.webp" alt="" width="900" height="408" />
-          <Suspense fallback={null}><PadScene onReady={() => setLive(true)} /></Suspense>
+          <Suspense fallback={null}><PadScene onReady={() => setLive(true)} inspect={mode === "intro"} /></Suspense>
+          {!touch && mode === "play" && <RunKeys />}
         </figure>
       </section>
 

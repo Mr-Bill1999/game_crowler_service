@@ -5,9 +5,10 @@ import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.j
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { BUTTON_ACTION, padInput } from "./padInput";
 
-/* The entrance gamepad, an old-console flat pad in one milky white, live but standing still:
-   press the face buttons and the d-pad. Everything springs back, and every press is passed on to
-   padInput for the ASCII hero. The model comes from Blender (public/hero/pad.glb) with its parts
+/* The entrance gamepad, an old-console flat pad in one milky white: press the face buttons and
+   the d-pad. Everything springs back, and every press is passed on to padInput for the ASCII
+   hero. On the preview ("inspect") a drag anywhere off the buttons turns the pad to look at it,
+   and it eases back when let go; in the game it stays still. The model comes from Blender (public/hero/pad.glb) with its parts
    as named nodes: Body, Btn_0..3, DPad (DPad_H, DPad_V). The soft floor shadow is drawn by the
    page, under the canvas. */
 
@@ -35,10 +36,16 @@ class Spring {
 
 type Press = { node: THREE.Object3D; rest: number; spring: Spring };
 
-export default function PadScene({ onReady }: { onReady?: () => void }) {
+/** How far a drag may turn the pad, in radians: around its vertical axis and towards the viewer. */
+const TURN_YAW = 1.1;
+const TURN_PITCH = 0.7;
+
+export default function PadScene({ onReady, inspect = false }: { onReady?: () => void; inspect?: boolean }) {
   const host = useRef<HTMLDivElement>(null);
   const ready = useRef(onReady);
   ready.current = onReady;
+  const inspectRef = useRef(inspect);
+  inspectRef.current = inspect;
 
   useEffect(() => {
     const el = host.current;
@@ -80,8 +87,13 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
     // Tell the hero where the pad's top edge is on screen, so he stands right on it.
     const publishTop = () => {
       if (!model) return;
+      // Measured in the resting pose, even if the pad is being turned right now.
+      const now = root.quaternion.clone();
+      root.quaternion.copy(baseQ);
       root.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(model);
+      root.quaternion.copy(now);
+      root.updateMatrixWorld(true);
       let top = 1;
       const p = new THREE.Vector3();
       for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) {
@@ -133,6 +145,12 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
 
     let pressing = false;
     let held: THREE.Object3D | null = null;
+    // Turning the pad to look at it: soft springs, so it eases back with a little sway.
+    const turn = { yaw: new Spring(36, 8), pitch: new Spring(36, 8) };
+    let turning: { x: number; y: number; yaw: number; pitch: number } | null = null;
+    const baseQ = new THREE.Quaternion();
+    const turnQ = new THREE.Quaternion();
+    const turnE = new THREE.Euler(0, 0, 0, "YXZ");
     const pointer = new THREE.Vector2();
     const ray = new THREE.Raycaster();
 
@@ -177,6 +195,13 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
         const near = nearest(event);
         if (near) { target = near.target; point = near.point; }
       }
+      if ((!target || !point) && inspectRef.current) {
+        // Off the buttons on the preview: the drag turns the pad.
+        turning = { x: event.clientX, y: event.clientY, yaw: turn.yaw.value, pitch: turn.pitch.value };
+        try { renderer.domElement.setPointerCapture(event.pointerId); } catch { /* untracked pointer */ }
+        el.style.cursor = "grabbing";
+        return;
+      }
       if (!target || !point) return;
       try { renderer.domElement.setPointerCapture(event.pointerId); } catch { /* a pointer the browser no longer tracks */ }
       if (presses.has(target)) {
@@ -202,7 +227,13 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
     };
 
     const move = (event: PointerEvent) => {
-      if (!pressing) el.style.cursor = part(pick(event)?.object) ? "pointer" : "";
+      if (turning) {
+        const k = 1 / Math.max(160, el.clientWidth * 0.5);
+        turn.yaw.target = THREE.MathUtils.clamp(turning.yaw + (event.clientX - turning.x) * k * TURN_YAW * 1.6, -TURN_YAW, TURN_YAW);
+        turn.pitch.target = THREE.MathUtils.clamp(turning.pitch + (event.clientY - turning.y) * k * TURN_PITCH * 1.6, -TURN_PITCH, TURN_PITCH);
+        return;
+      }
+      if (!pressing) el.style.cursor = part(pick(event)?.object) ? "pointer" : inspectRef.current && pick(event) ? "grab" : "";
     };
 
     const up = (event: PointerEvent) => {
@@ -211,15 +242,20 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
       if (held && dpad && held === dpad.node) { dpad.x.target = 0; dpad.z.target = 0; padInput.dpad = { x: 0, y: 0 }; }
       pressing = false;
       held = null;
+      if (turning) { turning = null; turn.yaw.target = 0; turn.pitch.target = 0; el.style.cursor = ""; }
     };
+    // A long press on a phone must not open a menu or select anything.
+    const noMenu = (e: Event) => e.preventDefault();
 
     const canvas = renderer.domElement;
     canvas.addEventListener("pointerdown", down);
     canvas.addEventListener("pointermove", move);
     canvas.addEventListener("pointerup", up);
     canvas.addEventListener("pointercancel", up);
+    canvas.addEventListener("contextmenu", noMenu);
 
-    root.quaternion.setFromEuler(touch ? BASE_TOUCH : BASE);
+    baseQ.setFromEuler(touch ? BASE_TOUCH : BASE);
+    root.quaternion.copy(baseQ);
     let frame = 0;
     let then = performance.now();
 
@@ -240,6 +276,13 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
         dpad.node.rotation.z = dpad.z.step(dt);
         moving = true;
       }
+      // Back to still the moment the game starts.
+      if (!inspectRef.current && !turning) { turn.yaw.target = 0; turn.pitch.target = 0; }
+      if (!(turn.yaw.resting && turn.pitch.resting) || turning) {
+        turnE.set(turn.pitch.step(dt), turn.yaw.step(dt), 0);
+        root.quaternion.copy(turnQ.setFromEuler(turnE)).multiply(baseQ);
+        moving = true;
+      }
       if (!moving && !dirty) return;
       dirty = false;
       renderer.render(scene, camera);
@@ -254,6 +297,7 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
       canvas.removeEventListener("pointermove", move);
       canvas.removeEventListener("pointerup", up);
       canvas.removeEventListener("pointercancel", up);
+      canvas.removeEventListener("contextmenu", noMenu);
       scene.traverse((node) => {
         const mesh = node as THREE.Mesh;
         if (!mesh.isMesh) return;

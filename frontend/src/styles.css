@@ -128,6 +128,27 @@ img { max-width:100%; }
 .entry-sun.is-up { pointer-events:none; }
 .entry-sun.is-up .entry-sun-text { opacity:0; }
 
+/* No blue boxes on a long press: the stage, the pad, the keycaps and the charts are things to
+   touch, not text to select. */
+.entry-stage,.entry-object,.pad-scene,.run-keys,.radar,.agree,.share-bar,.entry-picks { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+canvas,svg,.keycap,[role="button"],[role="tab"] { -webkit-tap-highlight-color:transparent; }
+.pad-scene canvas { touch-action:none; }
+
+/* The run on a computer: the pad steps aside for keycaps (W A S D, R) in its place. */
+.entry.is-desk.is-playing .entry-object>img,.entry.is-desk.is-playing .entry-object .pad-scene,.entry.is-desk.is-playing .entry-object:after { visibility:hidden; }
+.run-keys { position:absolute; inset:0; display:grid; grid-template-columns:repeat(3,58px) 26px 58px; grid-template-rows:repeat(2,58px); gap:8px; place-content:end center; padding-bottom:12%; animation:run-in .45s both; }
+.keycap { display:grid; place-items:center; align-content:center; gap:3px; padding:0; border:1px solid var(--line); border-radius:12px; background:transparent; box-shadow:0 3px 0 var(--line); color:var(--ink); cursor:pointer; transition:transform .08s,box-shadow .08s,background .12s,color .12s; }
+.keycap b { font:500 18px/1 var(--f-mono); }
+.keycap small { color:var(--muted); font:400 9px/1 var(--f-body); }
+.keycap:hover { border-color:var(--ink); }
+.keycap.is-down { transform:translateY(3px); box-shadow:0 0 0 var(--line); background:var(--ink); border-color:var(--ink); color:var(--paper); }
+.keycap.is-down small { color:color-mix(in srgb,var(--paper) 70%,transparent); }
+.key-w { grid-column:2; grid-row:1; }
+.key-a { grid-column:1; grid-row:2; }
+.key-s { grid-column:2; grid-row:2; }
+.key-d { grid-column:3; grid-row:2; }
+.key-r { grid-column:5; grid-row:2; }
+
 /* The arcade run: every text leaves, the stage takes the page, the pad stays as the controller. */
 .entry-head,.entry-title,.entry-panel,.entry-foot { transition:opacity .35s,visibility .35s; }
 .entry.is-playing .entry-head,.entry.is-playing .entry-title { opacity:0; visibility:hidden; }
@@ -559,6 +580,8 @@ select { min-height:42px; max-width:100%; padding:8px 12px; border:1px solid var
   .entry-panel { align-self:stretch; padding-top:8px; }
   .entry.is-playing .entry-head { display:none; }
   .entry.is-playing .entry-stage { min-height:calc(100svh - 24px); margin-top:12px; }
+  /* Phones: a smaller run — the pad shrinks under the world, the wizard is drawn smaller too. */
+  .entry.is-playing .entry-object { width:min(380px,84%); }
   .run-hud { padding:10px 0; }
   .run-side { margin-right:0; }
   .run-hint { left:0; top:62px; font-size:11px !important; }
