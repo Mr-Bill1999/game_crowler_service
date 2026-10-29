@@ -9,6 +9,7 @@ import { GameCard } from "./pages/GameCard";
 import { GamesList } from "./pages/GamesList";
 import { Welcome } from "./pages/Welcome";
 import "./styles.css";
+import { startReveal } from "./reveal";
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: 1 } } });
 
@@ -42,6 +43,8 @@ function Shell() {
     </div>
   );
 }
+
+startReveal();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

@@ -5,6 +5,7 @@ import { api, fmtDate, type GameBrief } from "../api";
 import { Score, TierPill } from "../components/Score";
 import { Cover } from "../components/Cover";
 import { Icon } from "../components/Icon";
+import { Select } from "../components/Select";
 
 const SORTS = [
   { value: "release", label: "Дата релиза" },
@@ -73,17 +74,10 @@ export function GamesList() {
           onChange={(e) => setDraft(e.target.value)}
         />
         </label>
-        <label className="field">
+        <div className="field">
           <Icon name="sliders" />
-          <span className="sr-only">Сортировка</span>
-          <select id="sort" value={sort} disabled={top} onChange={(e) => update((p) => p.set("sort", e.target.value))}>
-            {SORTS.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
+          <Select label="Сортировка" value={sort} disabled={top} options={SORTS} onChange={(v) => update((p) => p.set("sort", v))} />
+        </div>
       </div>
 
       <div className="catalog-filters">

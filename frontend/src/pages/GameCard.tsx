@@ -6,6 +6,7 @@ import { tagLabel } from "../tags";
 import { Score, TierPill } from "../components/Score";
 import { Cover } from "../components/Cover";
 import { Icon } from "../components/Icon";
+import { Select } from "../components/Select";
 import { ProfileBlock } from "../components/ProfileBlock";
 import { Voices } from "../components/Voices";
 
@@ -367,18 +368,10 @@ function ReviewsBlock({ g }: { g: GameDetail }) {
             </button>
           ))}
         </div>
-        <select id="review-platform" aria-label="Платформа отзывов" value={platform} onChange={(e) => setPlatform(e.target.value)}>
-          <option value="">Все платформы</option>
-          {g.platform_scores.map((p) => (
-            <option key={p.slug} value={p.name}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-        <select id="review-sort" aria-label="Сортировка отзывов" value={sort} onChange={(e) => setSort(e.target.value)}>
-          <option value="date">Сначала новые</option>
-          <option value="score">Сначала высокие оценки</option>
-        </select>
+        <Select label="Платформа отзывов" value={platform} onChange={setPlatform}
+          options={[{ value: "", label: "Все платформы" }, ...g.platform_scores.map((p) => ({ value: p.name, label: p.name }))]} />
+        <Select label="Сортировка отзывов" value={sort} onChange={setSort}
+          options={[{ value: "date", label: "Сначала новые" }, { value: "score", label: "Сначала высокие оценки" }]} />
       </div>
       {kind === "user" && (
         <p className="muted small">
