@@ -5,18 +5,21 @@ import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.j
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { BUTTON_ACTION, padInput } from "./padInput";
 
-/* The entrance gamepad, an old-console flat pad in one milky white: press the face buttons and
-   the d-pad. Everything springs back, and every press is passed on to padInput for the ASCII
-   hero. On the preview ("inspect") a drag anywhere off the buttons turns the pad to look at it,
-   and it eases back when let go; in the game it stays still. The model comes from Blender (public/hero/pad.glb) with its parts
-   as named nodes: Body, Btn_0..3, DPad (DPad_H, DPad_V). The soft floor shadow is drawn by the
-   page, under the canvas. */
+/* The entrance gamepad, a milky modern pad, for looking at and playing with on the preview (the
+   run itself is played on keys or on-screen buttons): press the face buttons and the d-pad, pull
+   the sticks — the left one runs the wizard. Everything springs back, and every press is passed on
+   to padInput for the ASCII hero. A drag anywhere off the parts turns the pad to look at it from
+   all sides; it eases back when let go. The model comes from Blender (public/hero/pad.glb) with
+   its parts as named nodes: Body, Btn_0..3, DPad (DPad_H, DPad_V), Stick_L/R, StickBase_L/R. The
+   soft floor shadow is drawn by the page, under the canvas. */
 
 const MODEL = "/hero/pad.glb";
-// Almost straight on, so the buttons face the viewer, tipped back just enough to read as an object;
-// on touch screens flatter still, under the thumb.
-const BASE = new THREE.Euler(1.34, 0, 0, "YXZ");
-const BASE_TOUCH = new THREE.Euler(1.44, 0, 0, "YXZ");
+// Facing the viewer: the face towards the camera, grips down, tipped back a little; on touch
+// screens almost straight on, so the buttons face the thumb.
+const BASE = new THREE.Euler(1.18, 0, 0, "YXZ");
+const BASE_TOUCH = new THREE.Euler(1.42, 0, 0, "YXZ");
+/** How far a stick tilts at full pull, in radians. */
+const STICK_MAX = 0.38;
 /** How far from a finger a part still counts as tapped, in CSS pixels. */
 const TOUCH_REACH = 44;
 
@@ -41,6 +44,7 @@ class Spring {
 }
 
 type Press = { node: THREE.Object3D; rest: number; spring: Spring };
+type Stick = { pivot: THREE.Object3D; mesh: THREE.Object3D; x: Spring; z: Spring; side: "L" | "R" };
 
 /** How far a drag may turn the pad, in radians: around its vertical axis and towards the viewer. */
 const TURN_YAW = 1.1;
@@ -86,6 +90,7 @@ export default function PadScene({ onReady, inspect = false }: { onReady?: () =>
     const touch = window.matchMedia("(pointer: coarse)").matches || window.innerWidth <= 720;
     const presses = new Map<THREE.Object3D, Press>();
     let dpad: { node: THREE.Object3D; x: Spring; z: Spring } | null = null;
+    const sticks = new Map<THREE.Object3D, Stick>();
     let radius = 2;
     let dirty = true;
     let model: THREE.Object3D | null = null;
@@ -143,6 +148,16 @@ export default function PadScene({ onReady, inspect = false }: { onReady?: () =>
       }
       const dp = model.getObjectByName("DPad");
       if (dp) dpad = { node: dp, x: new Spring(320, 16, 0.005), z: new Spring(320, 16, 0.005) };
+      for (const side of ["L", "R"] as const) {
+        const mesh = model.getObjectByName(`Stick_${side}`);
+        if (!mesh?.parent) continue;
+        // Tilt the stick around a point inside the body, below the cap.
+        const pivot = new THREE.Group();
+        pivot.position.copy(mesh.position).setY(mesh.position.y - 0.32);
+        mesh.parent.add(pivot);
+        pivot.attach(mesh);
+        sticks.set(mesh, { pivot, mesh, x: new Spring(150, 9, 0.004), z: new Spring(150, 9, 0.004), side });
+      }
       root.add(model);
       fit();
       dirty = true;
@@ -151,6 +166,9 @@ export default function PadScene({ onReady, inspect = false }: { onReady?: () =>
 
     let pressing = false;
     let held: THREE.Object3D | null = null;
+    let pulling: Stick | null = null;
+    const stickPlane = new THREE.Plane();
+    const hitPoint = new THREE.Vector3();
     // Turning the pad to look at it: soft springs, so it eases back with a little sway.
     const turn = { yaw: new Spring(36, 8), pitch: new Spring(36, 8) };
     let turning: { x: number; y: number; yaw: number; pitch: number } | null = null;
@@ -168,7 +186,7 @@ export default function PadScene({ onReady, inspect = false }: { onReady?: () =>
     };
     const part = (object: THREE.Object3D | undefined) => {
       for (let node = object; node; node = node.parent ?? undefined) {
-        if (presses.has(node) || node === dpad?.node) return node;
+        if (presses.has(node) || sticks.has(node) || node === dpad?.node) return node;
       }
       return null;
     };
@@ -177,7 +195,7 @@ export default function PadScene({ onReady, inspect = false }: { onReady?: () =>
     // centre is nearest on screen within reach, and the tap's point on the plane of the pad's face.
     const nearest = (event: PointerEvent) => {
       const rect = renderer.domElement.getBoundingClientRect();
-      const nodes = [...presses.keys(), ...(dpad ? [dpad.node] : [])];
+      const nodes = [...presses.keys(), ...sticks.keys(), ...(dpad ? [dpad.node] : [])];
       let best: THREE.Object3D | null = null;
       let bestDist = TOUCH_REACH;
       const p = new THREE.Vector3();
@@ -210,6 +228,12 @@ export default function PadScene({ onReady, inspect = false }: { onReady?: () =>
       }
       if (!target || !point) return;
       try { renderer.domElement.setPointerCapture(event.pointerId); } catch { /* a pointer the browser no longer tracks */ }
+      if (sticks.has(target)) {
+        pulling = sticks.get(target)!;
+        const normal = new THREE.Vector3(0, 1, 0).transformDirection(pulling.pivot.parent!.matrixWorld);
+        stickPlane.setFromNormalAndCoplanarPoint(normal, point);
+        return;
+      }
       if (presses.has(target)) {
         pressing = true;
         held = target;
@@ -239,6 +263,21 @@ export default function PadScene({ onReady, inspect = false }: { onReady?: () =>
         turn.pitch.target = THREE.MathUtils.clamp(turning.pitch + (event.clientY - turning.y) * k * TURN_PITCH * 1.6, -TURN_PITCH, TURN_PITCH);
         return;
       }
+      if (pulling) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
+        ray.setFromCamera(pointer, camera);
+        if (ray.ray.intersectPlane(stickPlane, hitPoint)) {
+          const local = pulling.pivot.parent!.worldToLocal(hitPoint.clone()).sub(pulling.pivot.position);
+          const pull = Math.min(1, Math.hypot(local.x, local.z) / 0.6);
+          const angle = Math.atan2(local.z, local.x);
+          pulling.z.target = -Math.cos(angle) * pull * STICK_MAX;
+          pulling.x.target = Math.sin(angle) * pull * STICK_MAX;
+          // The left stick runs the wizard, like the d-pad.
+          if (pulling.side === "L") padInput.dpad = { x: Math.abs(Math.cos(angle) * pull) > 0.3 ? Math.cos(angle) * pull : 0, y: 0 };
+        }
+        return;
+      }
       if (!pressing) el.style.cursor = part(pick(event)?.object) ? "pointer" : inspectRef.current && pick(event) ? "grab" : "";
     };
 
@@ -246,6 +285,7 @@ export default function PadScene({ onReady, inspect = false }: { onReady?: () =>
       if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
       if (held && presses.has(held)) presses.get(held)!.spring.target = 0;
       if (held && dpad && held === dpad.node) { dpad.x.target = 0; dpad.z.target = 0; padInput.dpad = { x: 0, y: 0 }; }
+      if (pulling) { pulling.x.target = 0; pulling.z.target = 0; if (pulling.side === "L") padInput.dpad = { x: 0, y: 0 }; pulling = null; }
       pressing = false;
       held = null;
       if (turning) { turning = null; turn.yaw.target = 0; turn.pitch.target = 0; el.style.cursor = ""; }
@@ -281,6 +321,14 @@ export default function PadScene({ onReady, inspect = false }: { onReady?: () =>
       if (dpad && !(dpad.x.resting && dpad.z.resting)) {
         dpad.node.rotation.x = dpad.x.step(dt);
         dpad.node.rotation.z = dpad.z.step(dt);
+        moving = true;
+      }
+      // The spring may overshoot; the stick itself never leaves its socket.
+      const limit = STICK_MAX * 1.05;
+      for (const st of sticks.values()) {
+        if (st.x.resting && st.z.resting) continue;
+        st.pivot.rotation.x = THREE.MathUtils.clamp(st.x.step(dt), -limit, limit);
+        st.pivot.rotation.z = THREE.MathUtils.clamp(st.z.step(dt), -limit, limit);
         moving = true;
       }
       // Back to still the moment the game starts.

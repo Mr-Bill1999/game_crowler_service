@@ -21,10 +21,9 @@ import { createRunner, type Box } from "./runner";
    scrolls (runner.ts), and the controls change:
    - jump: pad bottom, d-pad up, Space, W or ↑, a tap on the stage;
    - duck: d-pad down or S/↓ held, or pad left for a moment; in the air it drops him fast;
-   - fireball: pad top or right, R or F, a click on the stage — straight ahead;
-   - step back and forth around his spot: A/D or ←/→.
-   On a computer the pad gives way to keycaps during the run (W A S D, R); on a phone the pad
-   stays, still, and the run is drawn a little smaller. */
+   - fireball: R or F, a click on the stage — straight ahead.
+   He keeps to his spot: the run is jump, duck and fire, nothing else. The 3D pad is for the
+   preview; in the run it gives way to keycaps (W S R) on a computer and big buttons on a phone. */
 
 const MODEL = "/hero/hero.glb";
 const CLIPS: Record<Action, string> = { jump: "Hero_Jump", wave: "Hero_Wave", dance: "Hero_Dance", fireball: "Hero_Fireball" };
@@ -35,9 +34,6 @@ const HERO_H = 0.3;
 const HERO_H_RUN = 0.2;
 /** Phones ask for a smaller run, so more of the world fits around him. */
 const HERO_H_RUN_TOUCH = 0.13;
-/** How far A/D may step him off his spot in the run, as shares of the stage width. */
-const STEP_BACK = 0.1;
-const STEP_FORWARD = 0.3;
 const RUN_SPEED = 2.8;
 /** Where he runs in the arcade run, as a share of the stage width. */
 const GAME_X = 0.22;
@@ -114,8 +110,7 @@ export default function HeroAscii({ mode = "intro", round = 0, onOver, onExit }:
 
     // The hero starts on top of the gamepad (.entry-object, a sibling on the stage); a view offset
     // puts the world's origin there. He may run between the stage edges.
-    const edge = { left: -4, right: 6, game: -2, span: 10 };
-    let step = 0; // A/D in the run: his offset from the spot, as a share of the stage width
+    const edge = { left: -4, right: 6, game: -2 };
     let mode: Mode = "intro";
     const runner = createRunner(el, (score, lives) => gameHud.set({ score, lives }));
     let stageW = 1;
@@ -170,7 +165,6 @@ export default function HeroAscii({ mode = "intro", round = 0, onOver, onExit }:
       // On a phone he runs further left, so things take longer to reach him.
       const gameX = w < 600 ? 0.14 : GAME_X;
       edge.game = at(gameX * 2 - 1);
-      edge.span = at(1) - at(-1);
       const from = toCell(new THREE.Vector3(edge.left - 0.3, 0, 0));
       const to = toCell(new THREE.Vector3(edge.right + 0.3, 0, 0));
       // In the run the world draws its own ground.
@@ -342,7 +336,6 @@ export default function HeroAscii({ mode = "intro", round = 0, onOver, onExit }:
         idleSince = performance.now();
         if (next === "play") {
           runner.start();
-          step = 0;
           overSent = false;
           lift = 0;
           lift_v = 0;
@@ -403,12 +396,7 @@ export default function HeroAscii({ mode = "intro", round = 0, onOver, onExit }:
       } else {
         // The run: he keeps to his spot on the left third and runs on it while the world moves.
         const playing = mode === "play" && !runner.over;
-        // A/D (or ←/→) step him back and forth around his spot; the world still comes at him.
-        let walk = 0;
-        if (held.has("KeyA") || held.has("ArrowLeft")) walk -= 1;
-        if (held.has("KeyD") || held.has("ArrowRight")) walk += 1;
-        if (playing) step = THREE.MathUtils.clamp(step + walk * dt * 0.35, -STEP_BACK, STEP_FORWARD);
-        hero.position.x += (edge.game + step * edge.span - hero.position.x) * Math.min(1, dt * 6);
+        hero.position.x += (edge.game - hero.position.x) * Math.min(1, dt * 6);
         facing = 1;
         if (playing !== moving) { moving = playing; if (!oneShot) settle(); }
         const run = actions.get("Hero_Run");

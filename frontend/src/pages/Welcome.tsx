@@ -30,19 +30,15 @@ function RunHud({ best, onExit }: { best: number; onExit: () => void }) {
         <pre className="run-lives" aria-label={`Жизней: ${hud.lives}`}>{[0, 1, 2].map((i) => <b key={i} className={i < hud.lives ? "on" : ""}>{i < hud.lives ? "<3" : "</3"}</b>)}</pre>
         <button type="button" className="run-key" onClick={onExit}>[esc] выйти</button>
       </div>
-      {touchScreen() && <pre className="run-hint">{"крестовина ^ прыжок  v пригнуться\nверхняя кнопка * огонь"}</pre>}
     </div>
   );
 }
 
 /* On a computer the run is played on the keyboard, so the pad gives way to keycaps: W jumps,
-   A and D step, S ducks, R fires. They light up as they are pressed, and a click on one presses
-   it too. */
+   S ducks, R fires. They light up as they are pressed, and a click on one presses it too. */
 const KEYCAPS = [
   { key: "w", label: "W", hint: "прыжок", codes: ["KeyW", "ArrowUp", "Space"] },
-  { key: "a", label: "A", hint: "назад", codes: ["KeyA", "ArrowLeft"] },
   { key: "s", label: "S", hint: "пригнуться", codes: ["KeyS", "ArrowDown"] },
-  { key: "d", label: "D", hint: "вперёд", codes: ["KeyD", "ArrowRight"] },
   { key: "r", label: "R", hint: "огонь", codes: ["KeyR", "KeyF"] },
 ] as const;
 
@@ -59,7 +55,7 @@ function RunKeys() {
   }, []);
   const press = (code: string, type: "keydown" | "keyup") => window.dispatchEvent(new KeyboardEvent(type, { code }));
   return (
-    <div className="run-keys" aria-label="Управление: W — прыжок, A и D — шаг, S — пригнуться, R — огонь">
+    <div className="run-keys" aria-label="Управление: W — прыжок, S — пригнуться, R — огонь">
       {KEYCAPS.map((k) => (
         <button key={k.key} type="button" tabIndex={-1} className={`keycap key-${k.key} ${k.codes.some((c) => down.has(c)) ? "is-down" : ""}`}
           onPointerDown={(e) => { e.preventDefault(); press(k.codes[0], "keydown"); }}
@@ -67,6 +63,40 @@ function RunKeys() {
           <b>{k.label}</b>
           <small>{k.hint}</small>
         </button>
+      ))}
+    </div>
+  );
+}
+
+/* On a phone the run is played on big buttons under the thumbs, in the pad's place: the left
+   thumb jumps (▲) and ducks (▼), the right one fires. Each one holds its key for as long as the
+   finger is down, exactly like the keyboard. */
+const PADS = [
+  { id: "jump", label: "▲", hint: "прыжок", code: "KeyW", side: "l" },
+  { id: "duck", label: "▼", hint: "присесть", code: "KeyS", side: "l" },
+  { id: "fire", label: "✦", hint: "огонь", code: "KeyR", side: "r" },
+] as const;
+
+function RunPads() {
+  const [down, setDown] = useState<ReadonlySet<string>>(new Set());
+  const press = (code: string, on: boolean) => {
+    window.dispatchEvent(new KeyboardEvent(on ? "keydown" : "keyup", { code }));
+    setDown((d) => { const n = new Set(d); if (on) n.add(code); else n.delete(code); return n; });
+  };
+  return (
+    <div className="run-pads" aria-label="Управление: ▲ — прыжок, ▼ — присесть, ✦ — огонь">
+      {(["l", "r"] as const).map((side) => (
+        <div key={side} className={`run-pads-${side}`}>
+          {PADS.filter((p) => p.side === side).map((p) => (
+            <button key={p.id} type="button" tabIndex={-1} className={`touchpad pad-${p.id} ${down.has(p.code) ? "is-down" : ""}`} aria-label={p.hint}
+              onPointerDown={(e) => { e.preventDefault(); try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* untracked */ } press(p.code, true); }}
+              onPointerUp={() => press(p.code, false)} onPointerCancel={() => press(p.code, false)}
+              onContextMenu={(e) => e.preventDefault()}>
+              <b aria-hidden="true">{p.label}</b>
+              <small>{p.hint}</small>
+            </button>
+          ))}
+        </div>
       ))}
     </div>
   );
@@ -85,7 +115,8 @@ export function Welcome() {
   const game: GameBrief | undefined = games[picked];
   const strip = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<Mode>("intro");
-  // The device decides how the run is played: keycaps on a computer, the pad on a phone.
+  // The device decides how the run is played: keycaps on a computer, big buttons on a phone. The 3D
+  // pad is for the preview only.
   const [touch] = useState(touchScreen);
   const [round, setRound] = useState(0);
   const [best, setBest] = useState(readBest);
@@ -191,9 +222,9 @@ export function Welcome() {
           <h1>Шире каталога.<br /><span>Глубже оценки.</span></h1>
         </div>
         <figure className={`entry-object ${live ? "is-live" : ""}`}>
-          <img src="/hero/pad-front.webp" alt="" width="900" height="408" />
+          <img src="/hero/pad-front.webp" alt="" width="900" height="560" />
           <Suspense fallback={null}><PadScene onReady={() => setLive(true)} inspect={mode === "intro"} /></Suspense>
-          {!touch && mode === "play" && <RunKeys />}
+          {mode === "play" && (touch ? <RunPads /> : <RunKeys />)}
         </figure>
       </section>
 
