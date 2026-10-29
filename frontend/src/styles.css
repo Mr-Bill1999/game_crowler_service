@@ -416,6 +416,17 @@ select { min-height:42px; max-width:100%; padding:8px 12px; border:1px solid var
 .dp-top { display:flex; align-items:flex-end; justify-content:space-between; gap:24px; flex-wrap:wrap; }
 .dp-top p { margin-top:12px; font-size:13px; color:var(--muted); }
 .dp-actions { display:flex; flex-wrap:wrap; gap:8px; }
+/* The password asked before a pipeline run. */
+.run-dialog-back { position:fixed; inset:0; z-index:60; display:grid; place-items:center; padding:16px; background:color-mix(in srgb,var(--ink) 18%,transparent); backdrop-filter:blur(3px); -webkit-backdrop-filter:blur(3px); animation:fade-in .16s ease-out; }
+.run-dialog { display:grid; gap:14px; width:min(380px,100%); padding:26px; border:1px solid var(--line); border-radius:20px; background:var(--paper); box-shadow:0 30px 60px -30px #22261f66; animation:menu-in .2s cubic-bezier(.2,.7,.2,1); }
+.run-dialog h2 { margin:0; font:400 22px/1.2 var(--f-display); letter-spacing:-.02em; }
+.run-dialog p { margin:0; font-size:12px; }
+.run-dialog-field { min-height:46px; padding:0 18px; border:1px solid var(--line); border-radius:999px; background:transparent; color:var(--ink); font-size:14px; }
+.run-dialog-field:focus-visible { outline:none; border-color:var(--ink); }
+.run-dialog-field[aria-invalid="true"] { border-color:var(--bad); }
+.run-dialog-error { color:var(--bad); }
+.run-dialog-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:4px; }
+@keyframes fade-in { from { opacity:0; } }
 .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:0; border-block:1px solid var(--line); }
 .kpi { display:grid; gap:6px; align-content:start; min-width:0; padding:20px 20px 20px 0; }
 .kpi+.kpi { padding-left:20px; border-left:1px solid var(--line); }

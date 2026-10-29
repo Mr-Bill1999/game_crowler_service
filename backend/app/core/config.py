@@ -14,6 +14,8 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://ga:ga@localhost:5432/gameanalytics"
     redis_url: str = "redis://localhost:6379/0"
+    # Asked before a pipeline run is started from DevPanel. Empty: no password (the local stand).
+    admin_password: str = ""
 
     # Metacritic
     mc_backend: str = "https://backend.metacritic.com"

@@ -20,7 +20,7 @@ export function GamesList() {
   const [params, setParams] = useSearchParams();
   const searchRef = useRef<HTMLInputElement>(null);
   const q = params.get("q") ?? "";
-  const sort = params.get("sort") ?? "release";
+  const sort = params.get("sort") ?? "metascore"; // the best-rated first: the catalog opens on games with data
   const platforms = params.getAll("platform");
   const archived = params.get("archived") === "1";
   const top = params.get("top") === "1";
@@ -111,7 +111,7 @@ export function GamesList() {
 
       <div className="catalog-section-head">
         <div className="feed-tabs" role="group" aria-label="Подборка игр">
-          <button className={!top ? "active" : ""} aria-pressed={!top} onClick={() => update((p) => p.delete("top"))}>Новые релизы</button>
+          <button className={!top ? "active" : ""} aria-pressed={!top} onClick={() => update((p) => p.delete("top"))}>Все игры</button>
           <button className={top ? "active" : ""} aria-pressed={top} onClick={() => update((p) => (top ? p.delete("top") : p.set("top", "1")))}>Топ Metacritic <span>20</span></button>
         </div>
       </div>

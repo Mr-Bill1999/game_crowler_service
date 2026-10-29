@@ -172,6 +172,11 @@ export type DeepQuota = {
   resets_at: string;
 };
 
+/** A failed call, with the HTTP status so callers can tell "wrong password" from "server down". */
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   const id = clientId();
@@ -179,7 +184,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, { ...init, headers });
   if (!r.ok) {
     const body = await r.json().catch(() => null);
-    throw new Error(body?.detail ?? `Сервер ответил ${r.status}`);
+    throw new ApiError(typeof body?.detail === "string" ? body.detail : `Сервер ответил ${r.status}`, r.status);
   }
   return r.json();
 }
@@ -212,11 +217,12 @@ export const api = {
       reviews: Record<string, number>;
       queued_jobs: number;
       rate_limit_rps: number;
+      admin_required?: boolean;
     }>("/api/pipeline/stats"),
-  startRun: (kind: string) =>
+  startRun: ({ kind, password }: { kind: string; password?: string }) =>
     request<{ queued: boolean }>("/api/pipeline/run", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(password ? { "X-Admin-Password": password } : {}) },
       body: JSON.stringify({ kind }),
     }),
 };

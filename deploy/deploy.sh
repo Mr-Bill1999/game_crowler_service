@@ -37,7 +37,7 @@ install_docker() {
 write_env() {
   # Only what the server needs from backend/.env; local database and Redis addresses stay local.
   local keys
-  keys=$(grep -E '^GA_(GEMINI_API_KEYS?|YOUTUBE_API_KEY|LLM_PROVIDER|LLM_MODEL|LLM_THINKING_LEVEL)=' backend/.env || true)
+  keys=$(grep -E '^GA_(GEMINI_API_KEYS?|YOUTUBE_API_KEY|LLM_PROVIDER|LLM_MODEL|LLM_THINKING_LEVEL|ADMIN_PASSWORD)=' backend/.env || true)
   printf '%s\n' "$keys" | remote "set -e; umask 077; mkdir -p $DIR/deploy
     old=\$(grep -E '^POSTGRES_PASSWORD=' $DIR/deploy/.env 2>/dev/null || true)
     pw=\${old:-POSTGRES_PASSWORD=\$(openssl rand -hex 24)}

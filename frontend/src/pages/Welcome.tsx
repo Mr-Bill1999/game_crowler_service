@@ -188,7 +188,7 @@ export function Welcome() {
           </div>
         )}
         <div className="entry-title">
-          <h1>Твоя следующая.<br /><span>Любимая игра.</span></h1>
+          <h1>Шире каталога.<br /><span>Глубже оценки.</span></h1>
         </div>
         <figure className={`entry-object ${live ? "is-live" : ""}`}>
           <img src="/hero/pad-front.webp" alt="" width="900" height="408" />

@@ -44,6 +44,46 @@ function useEventStream() {
   return { events, live };
 }
 
+const RUN_LABEL = { hourly: "Запустить цикл", sweep: "Sweep каталога", bootstrap: "Первый запуск" } as const;
+type RunKind = keyof typeof RUN_LABEL;
+
+/** Asked on every run button: the password, and a moment to change one's mind about a misclick. */
+function RunDialog({ kind, onClose, onStarted }: { kind: RunKind; onClose: () => void; onStarted: (queued: boolean) => void }) {
+  const [password, setPassword] = useState("");
+  const field = useRef<HTMLInputElement>(null);
+  const run = useMutation({
+    mutationFn: api.startRun,
+    onSuccess: (r) => onStarted(r.queued),
+    onError: () => { setPassword(""); field.current?.focus(); },
+  });
+  useEffect(() => {
+    field.current?.focus();
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", esc);
+    return () => document.removeEventListener("keydown", esc);
+  }, [onClose]);
+  const error = run.error instanceof Error ? run.error.message : null;
+  return (
+    <div className="run-dialog-back" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <form className="run-dialog" role="dialog" aria-modal="true" aria-labelledby="run-dialog-title"
+            onSubmit={(e) => { e.preventDefault(); if (password) run.mutate({ kind, password }); }}>
+        <h2 id="run-dialog-title">{RUN_LABEL[kind]}</h2>
+        <p className="muted">Запуск пайплайна на проде. Введите пароль администратора.</p>
+        {/* A hidden user name lets password managers file and fill this password. */}
+        <input type="text" name="username" autoComplete="username" value="devpanel" readOnly hidden />
+        <input ref={field} className="run-dialog-field" type="password" name="password" autoComplete="current-password"
+               placeholder="Пароль" value={password} onChange={(e) => setPassword(e.target.value)}
+               aria-invalid={!!error} aria-describedby={error ? "run-dialog-error" : undefined} />
+        {error && <p id="run-dialog-error" className="run-dialog-error" role="alert">{error}</p>}
+        <div className="run-dialog-actions">
+          <button type="button" className="btn ghost" onClick={onClose}>Отмена</button>
+          <button type="submit" className="btn" disabled={!password || run.isPending}>{run.isPending ? "Запускаю…" : "Запустить"}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 const PAGE_LABEL: Record<string, string> = {
   game: "играют", welcome: "на входе", catalog: "в каталоге", card: "в карточках", devpanel: "в DevPanel", other: "где-то ещё",
 };
@@ -103,6 +143,13 @@ export function DevPanel() {
     mutationFn: api.startRun,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["runs"] }),
   });
+  const [asking, setAsking] = useState<RunKind | null>(null);
+  const [notQueued, setNotQueued] = useState(false);
+  const ask = (k: RunKind) => {
+    setNotQueued(false);
+    if (stats.data?.admin_required === false) start.mutate({ kind: k });  // the local stand has no password
+    else setAsking(k);
+  };
 
   const byNode = useMemo(() => {
     const acc: Record<string, { ok: number; retry: number; error: number; skip: number; ms: number[]; last: number }> = {};
@@ -138,13 +185,15 @@ export function DevPanel() {
         <div className="dp-actions">
           {(["hourly", "sweep", "bootstrap"] as const).map((k) => (
             <button key={k} className={`btn ${k === "hourly" ? "" : "ghost"}`} disabled={start.isPending}
-                    onClick={() => start.mutate(k)}>
-              {{ hourly: "Запустить цикл", sweep: "Sweep каталога", bootstrap: "Первый запуск" }[k]}
+                    onClick={() => ask(k)}>
+              {RUN_LABEL[k]}
             </button>
           ))}
         </div>
       </div>
-      {start.data && !start.data.queued && <p className="muted">Такой запуск уже в очереди или идёт.</p>}
+      {(notQueued || (start.data && !start.data.queued)) && <p className="muted">Такой запуск уже в очереди или идёт.</p>}
+      {asking && <RunDialog kind={asking} onClose={() => setAsking(null)}
+                            onStarted={(queued) => { setAsking(null); setNotQueued(!queued); qc.invalidateQueries({ queryKey: ["runs"] }); }} />}
 
       <Visitors data={visitors.data} />
 

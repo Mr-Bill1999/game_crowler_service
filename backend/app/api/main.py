@@ -1,4 +1,5 @@
 import asyncio
+import hmac
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
 from typing import Literal
@@ -259,7 +260,29 @@ class RunRequest(BaseModel):
     kind: Literal["hourly", "bootstrap", "sweep"]
 
 
-@app.post("/api/pipeline/run", status_code=202)
+ADMIN_TRIES = 5  # wrong passwords from one address before a pause
+ADMIN_PAUSE_S = 600
+
+
+async def require_admin(request: Request) -> None:
+    """DevPanel's run buttons ask for the password; it comes in X-Admin-Password. Guessing is slowed down to
+    ADMIN_TRIES wrong answers per address every ADMIN_PAUSE_S."""
+    if not settings.admin_password:
+        return
+    redis: Redis = request.app.state.redis
+    key = f"admin:fail:{client_ip(request)}"
+    if int(await redis.get(key) or 0) >= ADMIN_TRIES:
+        raise HTTPException(429, "Слишком много неверных попыток. Попробуйте через 10 минут.")
+    given = request.headers.get("x-admin-password", "")
+    if not hmac.compare_digest(given.encode(), settings.admin_password.encode()):
+        async with redis.pipeline(transaction=False) as p:
+            p.incr(key)
+            p.expire(key, ADMIN_PAUSE_S)
+            await p.execute()
+        raise HTTPException(401, "Неверный пароль" if given else "Нужен пароль")
+
+
+@app.post("/api/pipeline/run", status_code=202, dependencies=[Depends(require_admin)])
 async def start_run(body: RunRequest, request: Request):
     job = await request.app.state.arq.enqueue_job(f"run_{body.kind}", _job_id=f"manual:{body.kind}")
     return {"queued": job is not None}
@@ -281,7 +304,7 @@ async def pipeline_stats(request: Request, session: AsyncSession = Depends(db)):
     reviews = dict((await session.execute(select(Review.kind, func.count()).group_by(Review.kind))).all())
     queued = await request.app.state.redis.zcard("arq:queue")
     return {"tiers": tiers, "due_next_hour": due_hour, "reviews": reviews, "queued_jobs": queued,
-            "rate_limit_rps": settings.rate_limit_rps}
+            "rate_limit_rps": settings.rate_limit_rps, "admin_required": bool(settings.admin_password)}
 
 
 async def _presence_body(request: Request) -> tuple[str, dict] | None:
