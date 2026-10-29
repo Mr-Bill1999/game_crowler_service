@@ -13,7 +13,10 @@
 
 const CELL_W = 6;
 const CELL_H = 11;
-const FONT = `500 ${CELL_H}px "JetBrains Mono", ui-monospace, monospace`;
+// 10px of a monospace face advances exactly 6px (0.6em), so a whole row of glyphs drawn as one
+// string lands on the 6×11 grid: one fillText per row instead of one per glyph, which is what
+// keeps phones at a steady frame rate.
+const FONT = `500 10px "JetBrains Mono", ui-monospace, monospace`;
 // Inside the run everything is in colour — the contrast with the quiet ink-on-paper entrance.
 // Ink on paper, like the rest of the entrance: things differ by density, not by colour.
 const INK = "#22261f";
@@ -92,6 +95,7 @@ const pick = <T,>(items: [T, number][]) => {
 };
 
 export function createRunner(host: HTMLElement, onHud: (score: number, lives: number) => void) {
+  const touch = window.matchMedia("(pointer: coarse)").matches || window.innerWidth <= 720;
   const canvas = document.createElement("canvas");
   canvas.className = "entry-world";
   host.prepend(canvas);
@@ -123,7 +127,7 @@ export function createRunner(host: HTMLElement, onHud: (score: number, lives: nu
   const factor = () => Math.min(1 + t / 55, 2.5);
 
   const layout = (width: number, height: number, feet: number, heroHeight: number, heroCentre: number) => {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, touch ? 1.5 : 2);
     w = width;
     h = height;
     floor = feet;
@@ -210,6 +214,24 @@ export function createRunner(host: HTMLElement, onHud: (score: number, lives: nu
   };
 
   const cell = (col: number, row: number, ch: string) => ctx.fillText(ch, col * CELL_W, row * CELL_H + CELL_H / 2);
+  // Glyphs gathered per row, then each row drawn as one string (gaps as spaces).
+  const rowsBuf = new Map<number, string[]>();
+  const put = (col: number, row: number, ch: string) => {
+    if (col < 0 || row < 0) return;
+    let r = rowsBuf.get(row);
+    if (!r) { r = []; rowsBuf.set(row, r); }
+    r[col] = ch;
+  };
+  const flush = () => {
+    for (const [row, r] of rowsBuf) {
+      let start = 0;
+      while (start < r.length && r[start] === undefined) start++;
+      let line = "";
+      for (let i = start; i < r.length; i++) line += r[i] ?? " ";
+      if (line) ctx.fillText(line, start * CELL_W, row * CELL_H + CELL_H / 2);
+    }
+    rowsBuf.clear();
+  };
 
   const drawArt = (th: Thing, now: number) => {
     const art = ART[th.kind];
@@ -220,13 +242,12 @@ export function createRunner(host: HTMLElement, onHud: (score: number, lives: nu
     const row0 = Math.round(b.top / CELL_H) + bob;
     ctx.globalAlpha = th.dead ? Math.max(0, 1 - (t - th.dead) * 4) : 0.92;
     ctx.fillStyle = art.color;
-    frame.forEach((line, r) => {
-      for (let c = 0; c < line.length; c++) if (line[c] !== " ") cell(col0 + c, row0 + r, line[c]);
-    });
+    frame.forEach((line, r) => ctx.fillText(line, col0 * CELL_W, (row0 + r) * CELL_H + CELL_H / 2));
     if (th.kind === "log") {
       // The chains it hangs from, up to the top of the stage.
       ctx.globalAlpha = 0.45;
-      for (let r = row0 - 1; r >= 0; r--) { cell(col0 + 2, r, ":"); cell(col0 + 9, r, ":"); }
+      for (let r = row0 - 1; r >= 0; r--) { put(col0 + 2, r, ":"); put(col0 + 9, r, ":"); }
+      flush();
     }
   };
 
@@ -249,7 +270,7 @@ export function createRunner(host: HTMLElement, onHud: (score: number, lives: nu
       const row = 2 + ((i * 5) % 8);
       const c0 = Math.round(x / CELL_W);
       ["   .--.    ", " .(    ).-.", "(___.____._)"].forEach((line, r) => {
-        for (let c = 0; c < line.length; c++) if (line[c] !== " ") cell(c0 + c, row + r, line[c]);
+        ctx.fillText(line, c0 * CELL_W, (row + r) * CELL_H + CELL_H / 2);
       });
     }
 
@@ -263,10 +284,11 @@ export function createRunner(host: HTMLElement, onHud: (score: number, lives: nu
         const a = Math.round(at(x - CELL_W + off) / CELL_H);
         const b = Math.round(at(x + off) / CELL_H);
         const row = fr - 1 - b;
-        cell(c, row, b > a ? "/" : b < a ? "\\" : "_");
+        put(c, row, b > a ? "/" : b < a ? "\\" : "_");
         const v = Math.sin(Math.floor((x + off) / CELL_W) * 7.13 + seed) * 9301.7;
-        if (v - Math.floor(v) > 0.93) cell(c, row + 2, ".");
+        if (v - Math.floor(v) > 0.93) put(c, row + 2, ".");
       }
+      flush();
     };
     hills(0.12, h * 0.15, 1.7, 0.12);
     hills(0.3, h * 0.06, 4.1, 0.22);
@@ -275,13 +297,15 @@ export function createRunner(host: HTMLElement, onHud: (score: number, lives: nu
     const shift = Math.floor(scroll / CELL_W);
     const groundAt = (c: number) => { const v = Math.sin((c + shift) * 12.9898) * 43758.5453; return v - Math.floor(v); };
     ctx.globalAlpha = 0.6 * fill;
-    for (let c = 0; c < cols; c++) cell(c, fr, groundAt(c) > 0.86 ? "=" : "-");
+    for (let c = 0; c < cols; c++) put(c, fr, groundAt(c) > 0.86 ? "=" : "-");
+    flush();
     ctx.globalAlpha = 0.28 * fill;
     for (let c = 0; c < cols; c++) {
       const v = groundAt(c * 7 + 3);
-      if (v > 0.7) cell(c, fr + 1, v > 0.9 ? "," : ".");
-      if (v < 0.12) cell(c, fr + 2, "'");
+      if (v > 0.7) put(c, fr + 1, v > 0.9 ? "," : ".");
+      if (v < 0.12) put(c, fr + 2, "'");
     }
+    flush();
     ctx.globalAlpha = 1;
 
     for (const th of things) drawArt(th, now);
@@ -295,7 +319,7 @@ export function createRunner(host: HTMLElement, onHud: (score: number, lives: nu
     for (const p of popups) {
       ctx.globalAlpha = Math.max(0, 1 - p.age / 0.9);
       const row = Math.round((p.y - p.age * 40) / CELL_H);
-      [...p.text].forEach((ch, i) => cell(Math.round(p.x / CELL_W) + i, row, ch));
+      ctx.fillText(p.text, Math.round(p.x / CELL_W) * CELL_W, row * CELL_H + CELL_H / 2);
     }
     ctx.restore();
     ctx.globalAlpha = 1;

@@ -121,7 +121,9 @@ export default function HeroAscii({ mode = "intro", round = 0, onOver, onExit }:
       const w = el.clientWidth;
       const h = el.clientHeight;
       if (!w || !h) return;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      // Phones draw the ASCII pass at 1.5× rather than 2–3×: the glyphs stay crisp, the GPU breathes.
+      const coarse = window.matchMedia("(pointer: coarse)").matches || window.innerWidth <= 720;
+      const dpr = Math.min(window.devicePixelRatio || 1, coarse ? 1.5 : 2);
       renderer.setPixelRatio(dpr);
       renderer.setSize(w, h, false);
       const cols = Math.max(8, Math.floor(w / CELL_W));

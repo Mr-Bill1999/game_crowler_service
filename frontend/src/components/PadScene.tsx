@@ -50,7 +50,7 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
     } catch {
       return;
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, window.matchMedia("(pointer: coarse)").matches ? 1.5 : 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.AgXToneMapping;
     renderer.toneMappingExposure = 1.05;
@@ -74,6 +74,7 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
     const presses = new Map<THREE.Object3D, Press>();
     let dpad: { node: THREE.Object3D; x: Spring; z: Spring } | null = null;
     let radius = 2;
+    let dirty = true;
     let model: THREE.Object3D | null = null;
 
     // Tell the hero where the pad's top edge is on screen, so he stands right on it.
@@ -102,6 +103,7 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
       camera.lookAt(0, 0, 0);
       camera.updateProjectionMatrix();
       publishTop();
+      dirty = true;
     };
     const resize = new ResizeObserver(fit);
     resize.observe(el);
@@ -125,6 +127,7 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
       if (dp) dpad = { node: dp, x: new Spring(320, 16), z: new Spring(320, 16) };
       root.add(model);
       fit();
+      dirty = true;
       ready.current?.();
     }, undefined, () => undefined);
 
@@ -225,8 +228,20 @@ export default function PadScene({ onReady }: { onReady?: () => void }) {
       const dt = Math.min((now - then) / 1000, 1 / 30);
       then = now;
 
-      for (const p of presses.values()) p.node.position.y = p.rest - p.spring.step(dt) * 0.06;
-      if (dpad) { dpad.node.rotation.x = dpad.x.step(dt); dpad.node.rotation.z = dpad.z.step(dt); }
+      // The pad stands still: draw only while a part is still springing, or after a resize or load.
+      let moving = false;
+      for (const p of presses.values()) {
+        if (p.spring.resting) continue;
+        p.node.position.y = p.rest - p.spring.step(dt) * 0.06;
+        moving = true;
+      }
+      if (dpad && !(dpad.x.resting && dpad.z.resting)) {
+        dpad.node.rotation.x = dpad.x.step(dt);
+        dpad.node.rotation.z = dpad.z.step(dt);
+        moving = true;
+      }
+      if (!moving && !dirty) return;
+      dirty = false;
       renderer.render(scene, camera);
     };
     frame = requestAnimationFrame(tick);
