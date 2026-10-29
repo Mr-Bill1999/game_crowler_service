@@ -269,12 +269,14 @@ select { min-height:42px; max-width:100%; padding:8px 12px; border:1px solid var
 .platforms tr:last-child td { border-bottom:0; }
 .platforms .score { min-width:29px; height:29px; font-size:11px; }
 /* The card's tabs: one section at a time, stuck under the site header. */
-.card-tabs { position:sticky; top:var(--topbar-h,74px); z-index:15; display:flex; gap:4px; margin:0 -12px; padding:8px 12px; overflow-x:auto; scrollbar-width:none; background:color-mix(in srgb,var(--paper) 92%,transparent); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-bottom:1px solid var(--line); }
+.card-tabs { position:sticky; top:var(--topbar-h,74px); z-index:15; display:flex; gap:4px; margin:0; padding:8px 0; overflow-x:auto; scrollbar-width:none; background:color-mix(in srgb,var(--paper) 92%,transparent); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-bottom:1px solid var(--line); }
 .card-tabs::-webkit-scrollbar { display:none; }
 .card-tabs button { flex:none; padding:8px 15px; border:1px solid transparent; border-radius:999px; background:none; color:var(--muted); font-size:12px; cursor:pointer; transition:color .16s,border-color .16s,background .16s; }
 .card-tabs button:hover { color:var(--ink); }
 .card-tabs button.on { border-color:var(--ink); color:var(--ink); }
 .card-tabs sup { margin-left:3px; font-size:8px; }
+/* The tabs' own line is the divider: the section under them drops its top border. */
+.card-tabs+.block { border-top:0; padding-top:4px; }
 .description { max-width:72ch; white-space:pre-line; color:var(--ink); font-size:16px; line-height:1.8; }
 .block { display:grid; gap:20px; min-width:0; padding:36px 0 0; border-top:1px solid var(--line); overflow-wrap:anywhere; }
 .block>p { color:var(--ink); line-height:1.85; max-width:80ch; }
