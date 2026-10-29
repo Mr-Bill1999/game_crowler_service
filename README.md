@@ -7,7 +7,7 @@
 <p align="center"><b>Шире каталога. Глубже оценки.</b></p>
 
 <p align="center">
-  Аналитика выходящих видеоигр по данным Metacritic: новинки каждый час, сводки отзывов критиков и игроков,<br>
+  Аналитика выходящих видеоигр по данным Metacritic: новинки каждый час, сводки отзывов критиков и игроков,
   суть и профиль игры, похожие игры и разбор летсплеев с YouTube. Всё — в тихой айдентике «тушь по бумаге».
 </p>
 
@@ -101,10 +101,6 @@
 Тихая айдентика «тушь по бумаге»: тёплая бумага, глубокие чернила, шалфейный акцент и волосяные линии вместо
 плашек. Цвет появляется только там, где он что-то значит: в оценках и диаграммах.
 
-<table>
-<tr>
-<td valign="top" width="50%">
-
 | | Токен | Где |
 |---|---|---|
 | <img src="https://img.shields.io/badge/%20-%20-ece7df?style=flat-square" width="28" height="16" alt="#ece7df"> | `--paper` `#ece7df` | фон, поля, кнопки |
@@ -112,22 +108,10 @@
 | <img src="https://img.shields.io/badge/%20-%20-7c8a70?style=flat-square" width="28" height="16" alt="#7c8a70"> | `--accent` `#7c8a70` | вторая строка слогана, шляпа мага |
 | <img src="https://img.shields.io/badge/%20-%20-d6d0c5?style=flat-square" width="28" height="16" alt="#d6d0c5"> | `--line` `#d6d0c5` | волосяные линии |
 | <img src="https://img.shields.io/badge/%20-%20-8b877e?style=flat-square" width="28" height="16" alt="#8b877e"> | `--muted` `#8b877e` | подписи, вторичный текст |
+| <img src="https://img.shields.io/badge/%20-%20-2f8a5b?style=flat-square" width="28" height="16" alt="#2f8a5b"> <img src="https://img.shields.io/badge/%20-%20-b9b2a6?style=flat-square" width="28" height="16" alt="#b9b2a6"> <img src="https://img.shields.io/badge/%20-%20-c0532f?style=flat-square" width="28" height="16" alt="#c0532f"> | `#2f8a5b` `#b9b2a6` `#c0532f` | доли отзывов: хвалят · смешанно · ругают, проверено на дальтонизм |
 
-</td>
-<td valign="top" width="50%">
-
-| Шрифт | Роль |
-|---|---|
-| **Inter Tight** | заголовки, крупные цифры |
-| **Manrope** | основной текст |
-| `JetBrains Mono` | оценки, счёт, ASCII |
-
-Диаграммы: <img src="https://img.shields.io/badge/%20-%20-2f8a5b?style=flat-square" width="28" height="16" alt="#2f8a5b"> хвалят · <img src="https://img.shields.io/badge/%20-%20-b9b2a6?style=flat-square" width="28" height="16" alt="#b9b2a6"> смешанно · <img src="https://img.shields.io/badge/%20-%20-c0532f?style=flat-square" width="28" height="16" alt="#c0532f"> ругают — расходящаяся шкала,
-проверенная на различимость при дальтонизме.
-
-</td>
-</tr>
-</table>
+Шрифты: **Inter Tight** — заголовки и крупные цифры, **Manrope** — основной текст, `JetBrains Mono` — оценки,
+счёт и ASCII.
 
 Слоган — **«Шире каталога. Глубже оценки.»** Сервис не подбирает игру, а собирает аналитику: широта — тысячи игр
 каталога, глубина — разбор отзывов, суть и профиль каждой из них.
