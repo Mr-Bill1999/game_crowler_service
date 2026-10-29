@@ -257,7 +257,8 @@ async def start_deep(slug: str, request: Request, session: AsyncSession = Depend
 
 
 class RunRequest(BaseModel):
-    kind: Literal["hourly", "bootstrap", "sweep"]
+    # The first fill of an empty database (bootstrap) is a one-off: only `python -m app.cli enqueue bootstrap`.
+    kind: Literal["hourly", "sweep"]
 
 
 ADMIN_TRIES = 5  # wrong passwords from one address before a pause

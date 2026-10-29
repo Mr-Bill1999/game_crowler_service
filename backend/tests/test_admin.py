@@ -47,3 +47,10 @@ async def test_guessing_is_paused_after_five_misses_per_address(api):
 async def test_without_a_configured_password_runs_stay_open(api, monkeypatch):
     monkeypatch.setattr(main.settings, "admin_password", "")
     assert (await run(api)).status_code == 202
+
+
+async def test_the_first_fill_is_not_started_from_the_web(api):
+    r = await api.post("/api/pipeline/run", json={"kind": "bootstrap"},
+                       headers={"X-Real-IP": "3.3.3.3", "X-Admin-Password": "s3cret-pass"})
+    assert r.status_code == 422
+    assert main.app.state.arq.jobs == []

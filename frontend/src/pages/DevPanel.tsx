@@ -44,7 +44,7 @@ function useEventStream() {
   return { events, live };
 }
 
-const RUN_LABEL = { hourly: "Запустить цикл", sweep: "Sweep каталога", bootstrap: "Первый запуск" } as const;
+const RUN_LABEL = { hourly: "Запустить цикл", sweep: "Sweep каталога" } as const;
 type RunKind = keyof typeof RUN_LABEL;
 
 /** Asked on every run button: the password, and a moment to change one's mind about a misclick. */
@@ -183,7 +183,7 @@ export function DevPanel() {
           <p className="muted">Каждое действие пайплайна в реальном времени.</p>
         </div>
         <div className="dp-actions">
-          {(["hourly", "sweep", "bootstrap"] as const).map((k) => (
+          {(["hourly", "sweep"] as const).map((k) => (
             <button key={k} className={`btn ${k === "hourly" ? "" : "ghost"}`} disabled={start.isPending}
                     onClick={() => ask(k)}>
               {RUN_LABEL[k]}
