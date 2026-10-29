@@ -11,13 +11,13 @@
 
    Three lives; the world speeds up until a typical run ends in about two minutes. */
 
-const CELL_W = 6;
-const CELL_H = 11;
-// 10px of a monospace face advances exactly 6px (0.6em), so a whole row of glyphs drawn as one
-// string lands on the 6×11 grid: one fillText per row instead of one per glyph, which is what
-// keeps phones at a steady frame rate.
-const FONT = `500 10px "JetBrains Mono", ui-monospace, monospace`;
-// Inside the run everything is in colour — the contrast with the quiet ink-on-paper entrance.
+// The character cell: 6×11 on a computer, 5×9 on a phone, where the whole run is drawn smaller.
+// A monospace face advances 0.6em, so at cell-width / 0.6 px a whole row of glyphs drawn as one
+// string lands on the grid: one fillText per row instead of one per glyph, which is what keeps
+// phones at a steady frame rate.
+let CELL_W = 6;
+let CELL_H = 11;
+let FONT = `500 10px "JetBrains Mono", ui-monospace, monospace`;
 // Ink on paper, like the rest of the entrance: things differ by density, not by colour.
 const INK = "#22261f";
 const SAGE = "#7c8a70";
@@ -96,6 +96,9 @@ const pick = <T,>(items: [T, number][]) => {
 
 export function createRunner(host: HTMLElement, onHud: (score: number, lives: number) => void) {
   const touch = window.matchMedia("(pointer: coarse)").matches || window.innerWidth <= 720;
+  CELL_W = touch ? 5 : 6;
+  CELL_H = touch ? 9 : 11;
+  FONT = `500 ${(CELL_W / 0.6).toFixed(3)}px "JetBrains Mono", ui-monospace, monospace`;
   const canvas = document.createElement("canvas");
   canvas.className = "entry-world";
   host.prepend(canvas);

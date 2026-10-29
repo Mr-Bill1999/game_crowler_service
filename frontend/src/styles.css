@@ -580,8 +580,6 @@ select { min-height:42px; max-width:100%; padding:8px 12px; border:1px solid var
   .entry-panel { align-self:stretch; padding-top:8px; }
   .entry.is-playing .entry-head { display:none; }
   .entry.is-playing .entry-stage { min-height:calc(100svh - 24px); margin-top:12px; }
-  /* Phones: a smaller run — the pad shrinks under the world, the wizard is drawn smaller too. */
-  .entry.is-playing .entry-object { width:min(380px,84%); }
   .run-hud { padding:10px 0; }
   .run-side { margin-right:0; }
   .run-hint { left:0; top:62px; font-size:11px !important; }

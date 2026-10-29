@@ -34,7 +34,7 @@ const HERO_H = 0.3;
 /** Smaller in the run, where the stage takes the page and the world needs the room. */
 const HERO_H_RUN = 0.2;
 /** Phones ask for a smaller run, so more of the world fits around him. */
-const HERO_H_RUN_TOUCH = 0.155;
+const HERO_H_RUN_TOUCH = 0.13;
 /** How far A/D may step him off his spot in the run, as shares of the stage width. */
 const STEP_BACK = 0.1;
 const STEP_FORWARD = 0.3;
@@ -135,8 +135,10 @@ export default function HeroAscii({ mode = "intro", round = 0, onOver, onExit }:
       const dpr = Math.min(window.devicePixelRatio || 1, coarse ? 1.5 : 2);
       renderer.setPixelRatio(dpr);
       renderer.setSize(w, h, false);
-      const cols = Math.max(8, Math.floor(w / CELL_W));
-      const rows = Math.max(8, Math.floor(h / CELL_H));
+      // In the run on a phone the wizard takes the world's finer 5×9 grid, so the scene reads smaller.
+      const fine = mode !== "intro" && coarse;
+      const cols = Math.max(8, Math.floor(w / (fine ? 5 : CELL_W)));
+      const rows = Math.max(8, Math.floor(h / (fine ? 9 : CELL_H)));
       ascii.uniforms.uGrid.value.set(cols, rows);
       target.setSize(cols * 2, rows * 2);
       const box = el.getBoundingClientRect();
