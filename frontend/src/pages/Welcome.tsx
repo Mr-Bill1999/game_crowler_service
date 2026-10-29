@@ -5,6 +5,7 @@ import { api, type GameBrief } from "../api";
 import { Icon } from "../components/Icon";
 import type { Mode } from "../components/HeroAscii";
 import { gameHud } from "../components/padInput";
+import { presencePlaying } from "../presence";
 
 const PadScene = lazy(() => import("../components/PadScene"));
 const HeroAscii = lazy(() => import("../components/HeroAscii"));
@@ -108,6 +109,12 @@ export function Welcome() {
     setMode("over");
     return record;
   }, []);
+
+  // DevPanel counts visitors in the run apart from those just looking around.
+  useEffect(() => {
+    presencePlaying(mode !== "intro");
+    return () => presencePlaying(false);
+  }, [mode]);
 
   // On the game-over card: Enter or Space plays again.
   useEffect(() => {

@@ -10,6 +10,7 @@ import { GamesList } from "./pages/GamesList";
 import { Welcome } from "./pages/Welcome";
 import "./styles.css";
 import { startReveal } from "./reveal";
+import { presencePage, startPresence } from "./presence";
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: 1 } } });
 
@@ -19,7 +20,7 @@ function Shell() {
   const legacyCatalog = location.pathname === "/" && ["q", "sort", "platform", "archived", "top"].some((key) => params.has(key));
   const welcome = location.pathname === "/" && !legacyCatalog;
 
-  useEffect(() => { window.scrollTo(0, 0); }, [location.pathname]);
+  useEffect(() => { window.scrollTo(0, 0); presencePage(location.pathname); }, [location.pathname]);
 
   return (
     <div className={`shell ${welcome ? "welcome-shell" : ""}`}>
@@ -47,6 +48,7 @@ function Shell() {
 }
 
 startReveal();
+startPresence();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

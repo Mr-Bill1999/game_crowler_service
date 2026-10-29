@@ -14,6 +14,7 @@ from redis.exceptions import TimeoutError as RedisTimeoutError
 from sqlalchemy import and_, desc, func, nulls_last, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api import presence
 from app.core import clock
 from app.core.config import get_settings
 from app.core.db import SessionLocal, init_db
@@ -281,6 +282,50 @@ async def pipeline_stats(request: Request, session: AsyncSession = Depends(db)):
     queued = await request.app.state.redis.zcard("arq:queue")
     return {"tiers": tiers, "due_next_hour": due_hour, "reviews": reviews, "queued_jobs": queued,
             "rate_limit_rps": settings.rate_limit_rps}
+
+
+async def _presence_body(request: Request) -> tuple[str, dict] | None:
+    """Pings come as JSON, also from sendBeacon on tab close, which may label it text/plain."""
+    try:
+        body = await request.json()
+    except ValueError:
+        return None
+    client = body.get("id") if isinstance(body, dict) else None
+    if not isinstance(client, str) or not presence.ID_RE.match(client):
+        return None
+    return client, body
+
+
+@app.post("/api/presence", status_code=204)
+async def presence_ping(request: Request):
+    got = await _presence_body(request)
+    if got is None:
+        raise HTTPException(422, "bad presence ping")
+    client, body = got
+    path = body.get("path") if isinstance(body.get("path"), str) else "/"
+    try:
+        await presence.ping(request.app.state.redis, client, presence.page_of(path[:200], body.get("play") is True))
+    except (RedisConnectionError, RedisTimeoutError):
+        pass  # a missed ping is not worth an error in the visitor's console
+
+
+@app.post("/api/presence/leave", status_code=204)
+async def presence_leave(request: Request):
+    got = await _presence_body(request)
+    if got is None:
+        return
+    try:
+        await presence.leave(request.app.state.redis, got[0])
+    except (RedisConnectionError, RedisTimeoutError):
+        pass
+
+
+@app.get("/api/presence")
+async def presence_now(request: Request, days: int = Query(14, ge=1, le=presence.HISTORY_DAYS)):
+    try:
+        return await presence.snapshot(request.app.state.redis, days)
+    except (RedisConnectionError, RedisTimeoutError):
+        raise HTTPException(503, "presence unavailable") from None
 
 
 @app.get("/api/events/stream")

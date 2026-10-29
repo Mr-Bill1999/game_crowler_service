@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type PipelineEvent } from "../api";
+import { api, type PipelineEvent, type Presence } from "../api";
 
 const MAX_EVENTS = 3000;
 
@@ -44,6 +44,45 @@ function useEventStream() {
   return { events, live };
 }
 
+const PAGE_LABEL: Record<string, string> = {
+  game: "играют", welcome: "на входе", catalog: "в каталоге", card: "в карточках", devpanel: "в DevPanel", other: "где-то ещё",
+};
+
+const dayLabel = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+
+/** Who is on the site: online now by page, uniques today and for the week, and a bar per day. */
+function Visitors({ data }: { data?: Presence }) {
+  const days = data?.days ?? [];
+  const peak = Math.max(1, ...days.map((d) => d.visitors));
+  const pages = Object.entries(data?.pages ?? {}).sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0));
+  return (
+    <section className="visitors" aria-label="Посетители">
+      <div className="visitors-now">
+        <b className={data?.online ? "is-on" : ""}>{data ? data.online : "—"}</b>
+        <span>
+          {data ? `онлайн сейчас` : "нет данных"}
+          {pages.length > 0 && <> · {pages.map(([k, n]) => `${n} ${PAGE_LABEL[k] ?? k}`).join(" · ")}</>}
+        </span>
+      </div>
+      <dl className="visitors-sums">
+        <div><dt>сегодня</dt><dd>{data?.today ?? "—"}</dd></div>
+        <div><dt>7 дней</dt><dd>{data?.week ?? "—"}</dd></div>
+        <div><dt>{days.length} дней</dt><dd>{data?.period ?? "—"}</dd></div>
+      </dl>
+      <div className="visitors-days" role="img"
+           aria-label={days.map((d) => `${dayLabel(d.date)}: ${d.visitors}`).join(", ")}>
+        {days.map((d, i) => (
+          <div key={d.date} className={`vday ${i === days.length - 1 ? "is-today" : ""}`}
+               title={`${dayLabel(d.date)} · ${d.visitors} посетителей`}>
+            <i style={{ height: `${d.visitors ? Math.max(4, (d.visitors / peak) * 100) : 0}%` }} />
+          </div>
+        ))}
+        {days.length > 0 && <span className="vdays-axis"><span>{dayLabel(days[0].date)}</span><span>сегодня</span></span>}
+      </div>
+    </section>
+  );
+}
+
 export function DevPanel() {
   const { events, live } = useEventStream();
   const [now, setNow] = useState(Date.now());
@@ -59,6 +98,7 @@ export function DevPanel() {
 
   const stats = useQuery({ queryKey: ["stats"], queryFn: api.stats, refetchInterval: 5000 });
   const runs = useQuery({ queryKey: ["runs"], queryFn: api.runs, refetchInterval: 5000 });
+  const visitors = useQuery({ queryKey: ["presence"], queryFn: api.presence, refetchInterval: 10_000 });
   const start = useMutation({
     mutationFn: api.startRun,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["runs"] }),
@@ -105,6 +145,8 @@ export function DevPanel() {
         </div>
       </div>
       {start.data && !start.data.queued && <p className="muted">Такой запуск уже в очереди или идёт.</p>}
+
+      <Visitors data={visitors.data} />
 
       <div className="kpis">
         <div className={`kpi ${live ? "live" : "down"}`}>

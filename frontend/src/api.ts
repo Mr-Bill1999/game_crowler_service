@@ -135,7 +135,7 @@ export type Run = {
 };
 
 // Anonymous id for per-user limits (deep analyze); there are no accounts yet.
-function clientId(): string {
+export function clientId(): string {
   try {
     let id = localStorage.getItem("ga:client-id");
     if (!id) {
@@ -184,6 +184,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return r.json();
 }
 
+export type Presence = {
+  online: number;
+  pages: Partial<Record<"welcome" | "game" | "catalog" | "card" | "devpanel" | "other", number>>;
+  today: number;
+  week: number;
+  period: number;
+  days: { date: string; visitors: number }[];
+  online_window_s: number;
+};
+
 export const api = {
   games: (params: URLSearchParams) => request<{ total: number; items: GameBrief[] }>(`/api/games?${params}`),
   platforms: () => request<{ name: string; games: number }[]>("/api/platforms"),
@@ -194,6 +204,7 @@ export const api = {
     request<{ id: number; cached: boolean }>(`/api/games/${slug}/deep-analyze`, { method: "POST" }),
   deepQuota: () => request<DeepQuota>("/api/deep/quota"),
   runs: () => request<Run[]>("/api/pipeline/runs"),
+  presence: () => request<Presence>("/api/presence"),
   stats: () =>
     request<{
       tiers: Record<string, number>;
