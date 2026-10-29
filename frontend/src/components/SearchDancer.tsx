@@ -10,8 +10,8 @@ import { asciiPass } from "./asciiKit";
    motion he holds one pose. */
 
 const MODEL = "/hero/hero.glb";
-const CELL = { w: 4, h: 7 }; // finer than the stage's 6×11, with about as many rows on the figure: the same detail, smaller
-const HERO_SHARE = 0.9; // of the canvas height, feet on the bottom edge
+const CELL = { w: 4, h: 6 }; // finer than the stage's 6×11, with about as many rows on the figure: the same detail, smaller
+const HERO_SHARE = 0.86; // of the canvas height, feet on the bottom edge; the rest is room for his hat in the dance
 
 export default function SearchDancer({ input }: { input: React.RefObject<HTMLInputElement | null> }) {
   const host = useRef<HTMLDivElement>(null);
