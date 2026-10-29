@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { GameDetail, GameProfile, ProfileFactor } from "../api";
 
 const FACTORS: Record<string, { name: string; question: string }> = {
@@ -47,11 +48,7 @@ export function ProfileBlock({ g }: { g: GameDetail }) {
         <span className={`band band-${p.band}`}>{p.band_label}</span>
       </div>
       {p.profile ? (
-        <div className="factor-grid">
-          {Object.entries(FACTORS).map(([id, f]) => (
-            <FactorCard key={id} id={id} meta={f} factor={p.profile?.[id]} p={p} />
-          ))}
-        </div>
+        <FactorMap p={p} />
       ) : (
         <p className="profile-thin">
           Данных пока мало для выводов: профиль строится от наполненности {p.threshold} из 100. Ниже видно, что уже
@@ -60,6 +57,71 @@ export function ProfileBlock({ g }: { g: GameDetail }) {
       )}
       <Fullness p={p} />
     </section>
+  );
+}
+
+/* The six factors as a radar that is also the way in: one ray per factor, its length how much
+   evidence stands behind it (0–100), the dot's fill how sure the model is (full, half, hollow).
+   Picking a ray or its label opens that factor's verdict and evidence beside the chart, so six
+   long cards become one view. */
+const SHORT: Record<string, string> = {
+  "1": "Идентичность", "2": "Арт-крючок", "3": "Геймдизайн", "4": "Эмоции", "5": "Ограничения", "6": "Рынок",
+};
+
+function FactorMap({ p }: { p: GameProfile }) {
+  const [picked, setPicked] = useState("1");
+  const ids = Object.keys(FACTORS);
+  const W = 380, H = 330, cx = W / 2, cy = H / 2 + 4, R = 112;
+  const angle = (i: number) => -Math.PI / 2 + (i * 2 * Math.PI) / ids.length;
+  const at = (i: number, r: number) => [cx + Math.cos(angle(i)) * r, cy + Math.sin(angle(i)) * r] as const;
+  const ring = (k: number) => ids.map((_, i) => at(i, R * k).join(",")).join(" ");
+  const values = ids.map((id) => Math.max(4, p.factors[id]?.score ?? 0));
+  const shape = values.map((v, i) => at(i, (R * v) / 100).join(",")).join(" ");
+  return (
+    <div className="factor-map">
+      <figure className="radar">
+        <svg viewBox={`0 0 ${W} ${H}`} role="group" aria-label="Покрытие данными по шести аспектам профиля">
+          {[0.25, 0.5, 0.75, 1].map((k) => <polygon key={k} className="radar-grid" points={ring(k)} />)}
+          {ids.map((id, i) => {
+            const [x, y] = at(i, R);
+            return <line key={id} className={`radar-axis${picked === id ? " on" : ""}`} x1={cx} y1={cy} x2={x} y2={y} />;
+          })}
+          <polygon className="radar-shape" points={shape} />
+          {ids.map((id, i) => {
+            const v = p.factors[id]?.score ?? 0;
+            const conf = p.profile?.[id]?.confidence ?? "low";
+            const [x, y] = at(i, (R * Math.max(4, v)) / 100);
+            const [lx, ly] = at(i, R + 26);
+            const anchor = Math.abs(lx - cx) < 8 ? "middle" : lx > cx ? "start" : "end";
+            const pick = () => setPicked(id);
+            return (
+              <g key={id} className={`radar-point${picked === id ? " on" : ""}`} role="button" tabIndex={0} aria-pressed={picked === id}
+                aria-label={`${FACTORS[id].name}: покрытие ${v} из 100, ${CONFIDENCE[conf]}`}
+                onClick={pick} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } }}>
+                <title>{`${FACTORS[id].name} · ${v} из 100 · ${CONFIDENCE[conf]}`}</title>
+                <line className="radar-hit" x1={cx} y1={cy} x2={lx} y2={ly} />
+                <circle className={`radar-dot conf-${conf}`} cx={x} cy={y} r={picked === id ? 6 : 4.5} />
+                <text x={lx} y={ly} textAnchor={anchor} dominantBaseline="middle">
+                  <tspan className="radar-num">{id} </tspan>{SHORT[id]}
+                  <tspan className="radar-val" x={lx} dy="14">{v}</tspan>
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+        <figcaption className="muted small">
+          Длина луча — сколько данных за выводом, из 100.
+          <span className="radar-legend">
+            <span><i className="radar-key conf-high" />уверенно</span>
+            <span><i className="radar-key conf-medium" />умеренно</span>
+            <span><i className="radar-key conf-low" />мало данных</span>
+          </span>
+        </figcaption>
+      </figure>
+      <div className="factor-detail">
+        <FactorCard id={picked} meta={FACTORS[picked]} factor={p.profile?.[picked]} p={p} />
+      </div>
+    </div>
   );
 }
 
@@ -78,7 +140,7 @@ function FactorCard({ id, meta, factor, p }: {
           <h3>{meta.name}</h3>
           <p className="muted small">{meta.question}</p>
         </div>
-        <span className={`confidence conf-${factor?.confidence ?? "low"}`} title={`Покрытие фактора: ${score} из 100`}>
+        <span className={`conf-label conf-${factor?.confidence ?? "low"}`} title={`Покрытие фактора: ${score} из 100`}>
           {CONFIDENCE[factor?.confidence ?? "low"]}
         </span>
       </header>
@@ -131,7 +193,8 @@ function Sources({ ids, p }: { ids: number[]; p: GameProfile }) {
 function Fullness({ p }: { p: GameProfile }) {
   const sources = Object.entries(p.sources).sort((a, b) => b[1].evidence - a[1].evidence);
   return (
-    <div className="fullness" aria-label={`Наполненность ${p.fullness} из 100`}>
+    <details className="fullness" aria-label={`Наполненность ${p.fullness} из 100`}>
+      <summary>Наполненность {p.fullness} из 100 · источники и чего не хватает</summary>
       <div className="fullness-top">
         <div>
           <h3>Наполненность</h3>
@@ -162,23 +225,6 @@ function Fullness({ p }: { p: GameProfile }) {
         </div>
       </div>
       <div className="fullness-cols">
-        <div>
-          <h4 className="small muted">По факторам</h4>
-          <ul className="factor-bars">
-            {Object.entries(FACTORS).map(([id, f]) => {
-              const v = p.factors[id]?.score ?? 0;
-              return (
-                <li key={id}>
-                  <span className="small">{f.name}</span>
-                  <span className="bar" aria-hidden="true">
-                    <span style={{ width: `${v}%` }} className={v >= 60 ? "ok" : v >= 30 ? "mid" : "low"} />
-                  </span>
-                  <span className="mono small">{v}</span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
         <div>
           <h4 className="small muted">Источники</h4>
           <ul className="source-list small">
@@ -218,6 +264,6 @@ function Fullness({ p }: { p: GameProfile }) {
         {p.profiled_at && ` · профиль ${new Date(p.profiled_at).toLocaleString("ru-RU")}`}
         {p.model && ` · ${p.model}`}
       </p>
-    </div>
+    </details>
   );
 }

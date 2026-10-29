@@ -7,6 +7,7 @@ import { Score, TierPill } from "../components/Score";
 import { Cover } from "../components/Cover";
 import { Icon } from "../components/Icon";
 import { ProfileBlock } from "../components/ProfileBlock";
+import { Voices } from "../components/Voices";
 
 /* The card's sections, one at a time: the tabs replace one long scroll. Similar games always
    close the page, under whichever tab is open. The open tab lives in the URL hash. */
@@ -216,18 +217,7 @@ function AnalysisBlock({ g }: { g: GameDetail }) {
           </div>
         </>
       )}
-      <div className="cols">
-        {[["Критики", critic] as const, ["Игроки", user] as const].map(([label, s]) =>
-          s ? (
-            <div key={label} className="summary">
-              <h2>{label}</h2>
-              <p>{s.summary}</p>
-              <List title="Понравилось" items={s.liked} />
-              <List title="Не понравилось" items={s.disliked} />
-            </div>
-          ) : null,
-        )}
-      </div>
+      <Voices g={g} critic={critic} user={user} />
     </section>
   );
 }
