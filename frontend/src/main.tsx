@@ -30,7 +30,9 @@ function Shell() {
           <NavLink to="/games" end className={() => (location.pathname === "/games" && !params.has("top")) || legacyCatalog || location.pathname.startsWith("/game/") ? "active" : undefined}>Каталог</NavLink>
           <NavLink to="/games?top=1" className={() => (location.pathname === "/games" && params.has("top") ? "active" : undefined)}>Топ Metacritic</NavLink>
         </nav>
-        <NavLink to="/devpanel" className="topbar-side">DevPanel<Icon name="arrow-up-right" /></NavLink>
+        <NavLink to="/devpanel" className="topbar-side" aria-label="DevPanel" title="DevPanel">
+          <Icon name="terminal" className="side-short" /><span className="side-long">DevPanel</span><Icon name="arrow-up-right" className="side-long" />
+        </NavLink>
       </header>}
       <main>
         <Routes>

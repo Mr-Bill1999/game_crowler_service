@@ -65,6 +65,7 @@ img { max-width:100%; }
 .topbar nav a:hover,.topbar-side:hover { color:var(--accent); }
 .topbar-side { justify-self:end; }
 .topbar .icon { width:14px; height:14px; }
+.topbar-side .side-short { display:none; }
 .page { display:grid; gap:28px; max-width:1436px; margin:0 auto; padding:36px max(48px,calc((100vw - 1340px)/2)) 80px; }
 .page-head { display:flex; gap:15px; align-items:baseline; flex-wrap:wrap; }
 
@@ -457,9 +458,12 @@ select { min-height:42px; max-width:100%; padding:8px 12px; border:1px solid var
   .runs h3 { grid-column:1/-1; }
 }
 @media (max-width:650px) {
-  .topbar { grid-template-columns:1fr auto; padding:20px; gap:15px; }
+  .topbar { grid-template-columns:1fr auto auto; padding:20px; gap:15px; }
   .topbar nav { gap:18px; }
-  .topbar-side { display:none; }
+  /* On phones DevPanel stays reachable as a terminal icon at the end of the bar. */
+  .topbar-side { display:inline-grid; place-items:center; width:32px; height:32px; margin-right:-6px; border:1px solid var(--line); border-radius:50%; }
+  .topbar-side .side-long { display:none; }
+  .topbar-side .side-short { display:block; }
   .page { padding:24px 20px 56px; gap:22px; }
   h1 { font-size:clamp(36px,10vw,48px); }
   h2 { font-size:20px; }
