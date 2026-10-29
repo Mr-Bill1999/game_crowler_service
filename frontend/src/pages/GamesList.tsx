@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, fmtDate, type GameBrief } from "../api";
 import { Score, TierPill } from "../components/Score";
@@ -14,9 +14,11 @@ const SORTS = [
   { value: "reviews", label: "Число отзывов" },
 ];
 const PAGE = 48;
+const SearchDancer = lazy(() => import("../components/SearchDancer"));
 
 export function GamesList() {
   const [params, setParams] = useSearchParams();
+  const searchRef = useRef<HTMLInputElement>(null);
   const q = params.get("q") ?? "";
   const sort = params.get("sort") ?? "release";
   const platforms = params.getAll("platform");
@@ -66,6 +68,7 @@ export function GamesList() {
         <label className="search-field" htmlFor="search">
           <Icon name="search" />
           <input
+          ref={searchRef}
           id="search"
           className="search"
           type="search"
@@ -73,6 +76,7 @@ export function GamesList() {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
         />
+          <Suspense fallback={null}><SearchDancer input={searchRef} /></Suspense>
         </label>
         <div className="field">
           <Icon name="sliders" />
