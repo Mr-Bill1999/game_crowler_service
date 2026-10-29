@@ -421,7 +421,7 @@ const SIGNAL_LABEL = { gameplay: "игровой процесс", tags: "тег�
 function SimilarBlock({ g }: { g: GameDetail }) {
   const { method, items, series } = g.similar;
   return (
-    <section className="block">
+    <section className="block similar-block">
       <h2>Похожие игры</h2>
       <p className="muted small">
         {method === "essence"

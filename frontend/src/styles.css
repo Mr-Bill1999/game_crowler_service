@@ -276,7 +276,9 @@ select { min-height:42px; max-width:100%; padding:8px 12px; border:1px solid var
 .card-tabs button.on { border-color:var(--ink); color:var(--ink); }
 .card-tabs sup { margin-left:3px; font-size:8px; }
 /* The tabs' own line is the divider: the section under them drops its top border. */
-.card-tabs+.block { border-top:0; padding-top:4px; }
+.card-tabs+.block.block { border-top:0; padding-top:4px; }
+/* Similar games close the page as its footer: spacing, not another rule, sets them apart. */
+.block.similar-block { border-top:0; padding-top:24px; }
 .description { max-width:72ch; white-space:pre-line; color:var(--ink); font-size:16px; line-height:1.8; }
 .block { display:grid; gap:20px; min-width:0; padding:36px 0 0; border-top:1px solid var(--line); overflow-wrap:anywhere; }
 .block>p { color:var(--ink); line-height:1.85; max-width:80ch; }
