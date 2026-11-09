@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 from collections import Counter
 from contextvars import ContextVar
 from datetime import UTC, datetime, timedelta
@@ -424,6 +425,10 @@ async def enrich_due(ctx: dict, limit: int | None = None) -> dict:
     built = done = 0
     stopped = None
     cap = token_cap(s)
+    llm = ctx.get("llm")
+    if llm is not None and getattr(llm, "refused", None):  # a key refused with 403 carries no share of the budget
+        live = sum(1 for k in llm._keys if k.label not in llm.refused)
+        cap = cap * live // max(1, len(llm._keys))
     for game_id in batch.ids:
         async with d.sessions() as session:
             spent = await tokens_today(session, s, clock.now())
@@ -451,6 +456,12 @@ async def check_health(ctx: dict) -> dict:
     canaries = await run_canaries(redis, d.mc, ctx["steam"], now)
     async with d.sessions() as session:
         states = await evaluate(redis, session, now, canaries)
+    llm = ctx.get("llm")
+    refused = {k: why for k, (at, why) in (getattr(llm, "refused", None) or {}).items() if time.time() - at < 6 * 3600}
+    if refused and states["gemini"]["state"] in ("ok", "unknown", "stale"):
+        label, why = next(iter(refused.items()))
+        states["gemini"] = {"state": "degraded", "reason": f"ключ {label} отказал (403) и отложен на 6 ч, работают "
+                                                           f"остальные: {why[:120]}"}
     changed = await health.save_states(redis, states, now)
     for source, st in changed.items():
         await d.bus.emit(f"health.{source}", health.EVENT_STATUS[st["state"]], state=st["state"], was=st["was"],

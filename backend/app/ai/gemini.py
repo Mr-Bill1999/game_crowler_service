@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import random
 import re
 import time
@@ -28,8 +29,10 @@ PRICES: dict[str, tuple[float, float, float, float]] = {
 }
 RETRYABLE = {429, 500, 503, 504}
 MAX_WAIT_S = 180  # longer retryDelay means a daily limit: fail now, the next cycle tries again
+REFUSED_REST_S = 6 * 3600  # a key answering 403 is set aside this long, then tried again
 # Gemini's response_json_schema rejects some JSON Schema keywords; ours only need the basics.
 _UNSUPPORTED = {"additionalProperties"}
+log = logging.getLogger(__name__)
 
 
 def retry_delay(e: Exception, attempt: int) -> float:
@@ -81,6 +84,7 @@ class GeminiProvider:
             raise ValueError("no Gemini API key")
         self._keys = [_Key(k, i + 1) for i, k in enumerate(keys)]
         self._turn = 0
+        self.refused: dict[str, tuple[float, str]] = {}  # key label -> (when, why): read by the health check
         self.client = self._keys[0].client  # model listing in eval scripts
         self.default_model = default_model
         self.max_attempts = max_attempts
@@ -103,6 +107,19 @@ class GeminiProvider:
     def _rest(self, key: _Key) -> bool:
         """A daily limit on this key: set it aside for an hour. True when another key can take the call."""
         key.resting_until = time.monotonic() + 3600
+        return bool(self._active())
+
+    async def _refused(self, e: errors.APIError, key: _Key) -> bool:
+        """403: the key's project has lost access (Google closed its free tier, or the key was revoked). Without this
+        every fourth call failed on such a key (November 2026). Set it aside for six hours, tell the health check,
+        and let another key take the call. True when one can."""
+        if e.code != 403:
+            return False
+        key.resting_until = time.monotonic() + REFUSED_REST_S
+        reason = str(getattr(e, "message", "") or e)[:160]
+        self.refused[key.label] = (time.time(), reason)
+        log.warning("Gemini %s refused with 403, resting %d h: %s", key.label, REFUSED_REST_S // 3600, reason)
+        await health.record("gemini", "http_4xx", f"{key.label}: 403 {reason}")
         return bool(self._active())
 
     async def _pace(self) -> None:
@@ -153,7 +170,7 @@ class GeminiProvider:
                 delay = retry_delay(e, attempt)
                 # a daily limit answers "retry in hours": another key takes the call, or the cycle fails now
                 # rather than holding a worker slot until tomorrow
-                if e.code == 429 and delay > MAX_WAIT_S and self._rest(key):
+                if (e.code == 429 and delay > MAX_WAIT_S and self._rest(key)) or await self._refused(e, key):
                     attempt -= 1
                     continue
                 if e.code not in RETRYABLE or attempt == self.max_attempts or delay > MAX_WAIT_S:
@@ -214,7 +231,7 @@ class GeminiProvider:
                                        lambda key=key: once(key), summary=f"{model} x{len(texts)}")
             except errors.APIError as e:
                 delay = retry_delay(e, attempt)
-                if e.code == 429 and delay > MAX_WAIT_S and self._rest(key):
+                if (e.code == 429 and delay > MAX_WAIT_S and self._rest(key)) or await self._refused(e, key):
                     attempt -= 1
                     continue
                 if e.code not in RETRYABLE or attempt == self.max_attempts or delay > MAX_WAIT_S:

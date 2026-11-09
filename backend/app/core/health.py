@@ -87,7 +87,7 @@ def classify(e: BaseException) -> str:
     """The class of an outside failure, from the exception the clients raise."""
     name = type(e).__name__
     text = str(e).lower()
-    status = getattr(e, "status", None) or getattr(e, "code", None)
+    status = next((v for v in (getattr(e, "status", None), getattr(e, "code", None)) if isinstance(v, int)), None)
     if name == "QuotaExhausted" or "daily limit" in text or "quotaexceeded" in text or "over their daily" in text:
         return "quota"
     if name == "SourcePaused":
@@ -179,7 +179,7 @@ def judge(rule: Rule, window: dict[str, int], canary: dict | None, age_h: float 
     if rule.canary and canary is not None and not canary.get("ok"):
         return Verdict("down", f"контрольный запрос не прошёл: {canary.get('detail') or 'без ответа'}")
     if attempts >= rule.min_attempts and ok == 0:
-        return Verdict("down", f"0 успешных из {attempts} за {rule.window_h} ч, чаще всего: {KIND_LABEL[top]}")
+        return Verdict("down", f"успешно 0 из {attempts} за {rule.window_h} ч, чаще всего: {KIND_LABEL[top]}")
     if quota and ok == 0:
         return Verdict("quota", "дневная квота исчерпана, продолжит после сброса")
     if attempts >= 10 and failed / attempts >= rule.fail_rate:
@@ -190,7 +190,7 @@ def judge(rule: Rule, window: dict[str, int], canary: dict | None, age_h: float 
     if rule.stale_h is not None and age_h is not None and age_h > rule.stale_h:
         return Verdict("stale", f"новых данных нет {fmt_age(age_h)} (норма — до {fmt_age(rule.stale_h)})")
     if attempts or (canary and canary.get("ok")) or (age_h is not None):
-        return Verdict("ok", f"{ok} успешных из {attempts} за {rule.window_h} ч" if attempts else "работает")
+        return Verdict("ok", f"успешно {ok} из {attempts} за {rule.window_h} ч" if attempts else "работает")
     return Verdict("unknown", f"обращений не было {rule.window_h} ч")
 
 

@@ -14,7 +14,7 @@ report() {  # ok detail [games]
   echo "restore check: ok=$1 $2"
 }
 
-latest=$(ls -1t "$OUT"/daily/ga-*.dump 2>/dev/null | head -1)
+latest=$(find "$OUT/daily" -name 'ga-*.dump' | sort -r | head -1)
 [ -n "$latest" ] || { report 0 "no backup in $OUT/daily"; exit 1; }
 file=${latest#"$OUT"/}
 

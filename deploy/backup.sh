@@ -17,7 +17,7 @@ mv "$OUT/$name.tmp" "$OUT/$name"
 [ "$(date -u +%u)" = 7 ] && cp "$OUT/$name" "$OUT/weekly/"
 
 find "$OUT/daily" -name 'ga-*.dump' -mtime +13 -delete
-ls -1t "$OUT"/weekly/ga-*.dump 2>/dev/null | tail -n +9 | xargs -r rm -f
+find "$OUT/weekly" -name 'ga-*.dump' | sort -r | tail -n +9 | xargs -r rm -f  # names are dates: newest first
 
 size=$(stat -c %s "$OUT/$name")
 $DC exec -T redis redis-cli HSET health:backup at "$(date -u +%FT%T+00:00)" bytes "$size" file "$name" >/dev/null

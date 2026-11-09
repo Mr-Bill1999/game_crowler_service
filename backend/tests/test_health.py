@@ -40,7 +40,7 @@ def test_failed_canary_is_down_even_without_traffic():
 
 def test_no_success_in_enough_calls_is_down_and_names_the_commonest_error():
     v = judge(CANARY, {"redirect": 40, "network": 2}, {"ok": True}, 1)
-    assert v.state == "down" and "0 успешных из 42" in v.reason and "переадресация" in v.reason
+    assert v.state == "down" and "успешно 0 из 42" in v.reason and "переадресация" in v.reason
 
 
 def test_few_failures_are_not_an_outage():

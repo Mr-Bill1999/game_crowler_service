@@ -64,3 +64,33 @@ def test_settings_collect_keys_once_and_scale_budgets():
     assert s.gemini_keys == ["a", "b", "c"]
     assert s.llm_daily_budget == 3 * s.llm_daily_tokens
     assert Settings(gemini_api_key=None, gemini_api_keys="").llm_daily_budget == s.llm_daily_tokens
+
+
+
+def test_a_key_refused_with_403_is_set_aside_and_the_next_key_answers():
+    """Google closed the free tier for one key's project (November 2026): it answered 403 to every call it got."""
+    log: list = []
+    p = provider([None, None], log)
+
+    async def refused(**_):
+        log.append("key1")
+        raise errors.ClientError(403, {"error": {"code": 403, "status": "PERMISSION_DENIED",
+                                                 "message": "The Gemini API free tier is not available for this project."}})
+
+    p._keys[0].client = SimpleNamespace(aio=SimpleNamespace(models=SimpleNamespace(generate_content=refused)))
+    for _ in range(3):
+        assert call(p).data == {"ok": True}
+    assert log.count("key1") == 1 and log.count("key2") == 3  # asked once, then set aside; nothing failed
+    assert "key1" in p.refused and "free tier" in p.refused["key1"][1]
+
+
+def test_every_key_refused_fails():
+    log: list = []
+    p = provider([None], log)
+
+    async def refused(**_):
+        raise errors.ClientError(403, {"error": {"code": 403, "status": "PERMISSION_DENIED", "message": "no"}})
+
+    p._keys[0].client = SimpleNamespace(aio=SimpleNamespace(models=SimpleNamespace(generate_content=refused)))
+    with pytest.raises(errors.ClientError):
+        call(p)
