@@ -28,13 +28,14 @@
   <img alt="three.js" src="https://img.shields.io/badge/three.js-ASCII%20shader-7c8a70?logo=threedotjs&labelColor=22261f&color=7c8a70&logoColor=ece7df&style=flat-square">
   <img alt="Gemini" src="https://img.shields.io/badge/Gemini-3.5%20Flash--Lite-7c8a70?logo=googlegemini&labelColor=22261f&color=7c8a70&logoColor=ece7df&style=flat-square">
   <img alt="Docker" src="https://img.shields.io/badge/Docker-Compose-7c8a70?logo=docker&labelColor=22261f&color=7c8a70&logoColor=ece7df&style=flat-square">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-149%20unit%20%2B%2013%20integration-7c8a70?labelColor=22261f&color=7c8a70&logoColor=ece7df&style=flat-square">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-157%20unit%20%2B%2015%20integration-7c8a70?labelColor=22261f&color=7c8a70&logoColor=ece7df&style=flat-square">
 </p>
 
 > **Последний патч — 9 ноября 2026.** Отзывы Steam снова собираются (Valve отключила старый адрес 22 октября), в
 > DevPanel появилось здоровье каждого внешнего источника, пересчёт похожих игр больше не растёт как квадрат
 > каталога, бэкапы идут по расписанию с проверкой восстановления. Что, почему и как проверено —
-> [docs/patches/2026-11-09](docs/patches/2026-11-09/README.md).
+> [docs/patches/2026-11-09](docs/patches/2026-11-09/README.md); бюджет профилей и равномерный темп —
+> [docs/patches/2026-11-09/budget](docs/patches/2026-11-09/budget/README.md).
 
 ---
 
