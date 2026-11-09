@@ -65,6 +65,7 @@ export type GameProfile = {
   band: "thin" | "partial" | "enough" | "rich";
   band_label: string;
   threshold: number;
+  waiting_reviews?: boolean;
   factors: Record<string, { score: number; kinds: string[] }>;
   sources: Record<string, { documents: number; evidence: number }>;
   evidence_count: number;

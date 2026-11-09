@@ -90,6 +90,10 @@ class Settings(BaseSettings):
     profile_per_run: int = 40  # new and due games per run, at most; the rest wait for the next hour
     profile_new_days: int = 3  # discovered within this window: "new", always enriched (the discovery window)
     profile_backlog_share: float = 0.25  # of the earlier catalogue per quota day: four days to cover it all
+    profile_min_steam_reviews: int = 5  # without Metacritic scores or a top place, this many Steam reviews make a game
+    # worth reading: unrated games without them never reached a profile (0 of 3 887 by Nov 2026), so their documents
+    # are collected but left unread until the game has something to say
+    profile_pace_reserve: float = 0.25  # share of the profiles' daily tokens the paced queue leaves to new games
     profile_token_share: float = 0.6  # of the day's safe token budget the profiles may spend; the rest is the
     # summaries' and deep analyses'
     steam_rps: float = 1.0  # store.steampowered.com answers 429 to bursts; ~200 requests per 5 minutes is safe

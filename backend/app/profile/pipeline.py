@@ -27,12 +27,37 @@ SOURCES = ["mc", "steam_store", "steam_reviews", "steam_news", "critic_full"]
 class EnrichResult:
     slug: str
     collected: dict = field(default_factory=dict)
+    waiting: bool = False  # nothing worth reading yet: documents collected, the model not called
     extracted: int = 0
     tokens_in: int = 0
     tokens_out: int = 0
     fullness: int = 0
     built: bool = False
     errors: dict = field(default_factory=dict)
+
+
+def worth_reading(rated: bool, top: bool, steam_reviews: int, min_reviews: int) -> bool:
+    """Whether the model should read a game's documents: Metacritic scores, a place in the top, or enough Steam
+    reviews. Unrated games without Steam reviews never reached a profile (fullness 4 on average, 0 of 3 887 at 60+),
+    so spending tokens on them buys nothing; their documents wait until the game has something to say."""
+    return rated or top or steam_reviews >= min_reviews
+
+
+async def readable(session, game: Game, s: Settings) -> bool:
+    if (game.critic_count or 0) + (game.user_count or 0) > 0 or game.top_rank is not None:
+        return True
+    n = await session.scalar(select(func.count()).select_from(Document).where(
+        Document.game_id == game.id, Document.source == "steam_reviews")) or 0
+    return worth_reading(False, False, n, s.profile_min_steam_reviews)
+
+
+def pace_limit(cap: int, now: datetime, day_start: datetime, reserve: float) -> int:
+    """How much of today's profile budget the paced queue (refreshes, backfills, the old catalogue) may have spent by
+    now: an even share per hour of the quota day, counted cumulatively so a quiet hour's share carries over, and
+    never the reserve kept for new games, except in the last two hours, when what is left would go unused."""
+    hour = max(0, int((now - day_start).total_seconds() // 3600))
+    limit = int(cap * min(1.0, (hour + 1) / 24))
+    return limit if hour >= 22 else min(limit, int(cap * (1 - reserve)))
 
 
 def next_pass(game: Game, now: datetime, s: Settings) -> datetime | None:
@@ -47,6 +72,7 @@ class Batch:
     """What one run takes: every new game, games due again, and a share of the earlier catalogue."""
 
     ids: list[int]
+    free: set[int] = field(default_factory=set)  # new games and the top: never held back by the pace
     new: int = 0
     refresh: int = 0
     backlog: int = 0
@@ -72,8 +98,8 @@ async def plan_batch(session, s: Settings, now: datetime, limit: int | None = No
     new = list((await session.execute(base.where(live, never, Game.discovered_at >= new_cut)
                                       .order_by(*PRIORITY).limit(limit))).scalars())
     refresh = list((await session.execute(base.where(live, GameProfile.next_enrich_at <= now)
-                                          .order_by(GameProfile.next_enrich_at).limit(max(0, limit - len(new))))
-                    ).scalars())
+                                          .order_by(Game.top_rank.asc().nulls_last(), GameProfile.next_enrich_at)
+                                          .limit(max(0, limit - len(new))))).scalars())
 
     old = Game.discovered_at < new_cut
     total = await session.scalar(select(func.count()).select_from(Game).where(live, old)) or 0
@@ -86,7 +112,10 @@ async def plan_batch(session, s: Settings, now: datetime, limit: int | None = No
     take = min(left_today, math.ceil(daily / 12))  # a twelfth of the day's share per run: done by midday
     backlog = list((await session.execute(base.where(live, never, old).order_by(*PRIORITY).limit(take))).scalars()
                    ) if take else []
-    return Batch(ids=new + refresh + backlog, new=len(new), refresh=len(refresh), backlog=len(backlog),
+    ids = new + refresh + backlog
+    top = set((await session.execute(select(Game.id).where(Game.id.in_(ids), Game.top_rank.is_not(None)))).scalars()
+              ) if ids else set()
+    return Batch(ids=ids, free=set(new) | top, new=len(new), refresh=len(refresh), backlog=len(backlog),
                  backlog_left_today=left_today - len(backlog), backlog_remaining=remaining - len(backlog))
 
 
@@ -190,7 +219,10 @@ async def enrich_game(sessions, provider, steam: Steam, critics: Critics, s: Set
         game = await session.get(Game, game_id)
     res = EnrichResult(slug=game.slug)
     await collect_all(sessions, steam, critics, s, game_id, res)
-    if provider is not None:
+    async with sessions() as session:
+        game = await session.get(Game, game_id)
+        res.waiting = not await readable(session, game, s)
+    if provider is not None and not res.waiting:
         await extract_new(sessions, provider, s, game, res)
 
     now = clock.now()
@@ -229,7 +261,7 @@ async def enrich_game(sessions, provider, steam: Steam, critics: Critics, s: Set
     return res
 
 
-async def card(session, game: Game, threshold: int) -> dict | None:
+async def card(session, game: Game, threshold: int, s: Settings | None = None) -> dict | None:
     """What the game card shows: fullness with its band and what is missing, the profile, the evidence it cites."""
     prof = await session.get(GameProfile, game.id)
     if prof is None:
@@ -246,6 +278,7 @@ async def card(session, game: Game, threshold: int) -> dict | None:
         Document.id.in_(doc_ids)))).all()) if doc_ids else {}
     return {
         "fullness": prof.fullness, "band": code, "band_label": label, "threshold": threshold,
+        "waiting_reviews": prof.payload is None and s is not None and not await readable(session, game, s),
         "factors": {f: {"score": round(100 * x["score"]), "kinds": x["kinds"]} for f, x in (prof.factors or {}).items()},
         "sources": prof.sources, "evidence_count": prof.evidence_count,
         "steam": {"appid": link.external_id, "url": link.url, "reviews": (link.info or {}).get("reviews"),

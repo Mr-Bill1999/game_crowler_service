@@ -49,6 +49,11 @@ export function ProfileBlock({ g }: { g: GameDetail }) {
       </div>
       {p.profile ? (
         <FactorMap p={p} />
+      ) : p.waiting_reviews ? (
+        <p className="profile-thin">
+          Профиль появится, когда у игры будут отзывы: оценки на Metacritic или отзывы игроков в Steam. Пока у неё нет
+          ни того, ни другого, и делать выводы не из чего.
+        </p>
       ) : (
         <p className="profile-thin">
           Данных пока мало для выводов: профиль строится от наполненности {p.threshold} из 100. Ниже видно, что уже

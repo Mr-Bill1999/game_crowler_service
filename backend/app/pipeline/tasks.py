@@ -27,11 +27,11 @@ from app.pipeline.facets import build_essences, embed_pending, refinish_all, sta
 from app.pipeline.healthcheck import evaluate, run_canaries
 from app.pipeline.ingest import Deps, IngestResult, ingest_game
 from app.pipeline.quarantine import card_failed, cards_ok
-from app.pipeline.quota import FREE_STATUSES
+from app.pipeline.quota import FREE_STATUSES, quota_day
 from app.pipeline.similarity import rebuild
 from app.pipeline.top import record_top
 from app.profile.pipeline import enrich_game as enrich_one
-from app.profile.pipeline import plan_batch, token_cap, tokens_today
+from app.profile.pipeline import pace_limit, plan_batch, token_cap, tokens_today
 from app.scraper.client import MCClient
 from app.scraper.metacritic import Metacritic
 from app.sources.critics import Critics
@@ -407,6 +407,7 @@ async def enrich_game(ctx: dict, game_id: int) -> dict:
     res = await enrich_one(d.sessions, ctx.get("llm"), ctx["steam"], ctx["critics"], d.settings, game_id)
     await d.bus.emit("profile.game", "error" if res.errors and not res.extracted and not res.collected else "ok",
                      slug=res.slug, collected=res.collected or None, evidence=res.extracted or None,
+                     waiting=res.waiting or None,
                      fullness=res.fullness, built=res.built or None, tokens_in=res.tokens_in or None,
                      tokens_out=res.tokens_out or None, errors=res.errors or None)
     return {"slug": res.slug, "fullness": res.fullness, "built": res.built}
@@ -422,19 +423,27 @@ async def enrich_due(ctx: dict, limit: int | None = None) -> dict:
     await d.bus.emit("profile.due", count=len(batch.ids), new=batch.new, refresh=batch.refresh,
                      backlog=batch.backlog, backlog_left_today=batch.backlog_left_today,
                      backlog_remaining=batch.backlog_remaining)
-    built = done = 0
+    built = done = paced = 0
     stopped = None
     cap = token_cap(s)
     llm = ctx.get("llm")
     if llm is not None and getattr(llm, "refused", None):  # a key refused with 403 carries no share of the budget
         live = sum(1 for k in llm._keys if k.label not in llm.refused)
         cap = cap * live // max(1, len(llm._keys))
+    day_start, _ = quota_day(clock.now(), s.quota_tz)
+    spent = pace = 0
     for game_id in batch.ids:
         async with d.sessions() as session:
             spent = await tokens_today(session, s, clock.now())
         if spent >= cap:
             stopped = f"profiles spent {spent} of {cap} tokens today"
             break
+        # new games and the top may use the whole day's budget; everything else keeps to an even pace and leaves a
+        # reserve, so a backfill can no longer spend the day in an hour and leave new games waiting for tomorrow
+        pace = pace_limit(cap, clock.now(), day_start, s.profile_pace_reserve)
+        if game_id not in batch.free and spent >= pace:
+            paced += 1
+            continue
         try:
             built += (await enrich_game(ctx, game_id))["built"]
             done += 1
@@ -442,7 +451,7 @@ async def enrich_due(ctx: dict, limit: int | None = None) -> dict:
             log.exception("enrich failed: %s", game_id)
             await d.bus.emit("profile.game", "error", game_id=game_id, error=_reason(e))
     await d.bus.emit("profile.done", "skip" if stopped else "ok", games=done, built=built, planned=len(batch.ids),
-                     stopped=stopped)
+                     stopped=stopped, held_by_pace=paced or None, spent=spent, pace=pace or None, cap=cap)
     return {"games": done, "built": built, "planned": len(batch.ids), "new": batch.new, "refresh": batch.refresh,
             "backlog": batch.backlog, "backlog_remaining": batch.backlog_remaining, "stopped": stopped}
 

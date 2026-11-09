@@ -39,3 +39,35 @@ async def test_backlog_stops_at_the_days_share(sessions):
         await s.commit()
         b = await plan_batch(s, S, NOW)
     assert b.backlog == 0 and b.backlog_left_today == 0 and b.backlog_remaining == 30
+
+
+async def test_new_games_and_the_top_are_free_of_the_pace_and_the_top_goes_first(sessions):
+    async with sessions() as s:
+        s.add_all([game(1, 0.5), game(2, 30), game(3, 30, top_rank=4), game(4, 30)])
+        await s.flush()
+        due = NOW - timedelta(hours=1)
+        s.add_all([GameProfile(game_id=2, next_enrich_at=due - timedelta(days=2), profile_evidence=0),
+                   GameProfile(game_id=3, next_enrich_at=due, profile_evidence=0),
+                   GameProfile(game_id=4, next_enrich_at=due - timedelta(days=1), profile_evidence=0)])
+        await s.commit()
+        b = await plan_batch(s, S, NOW, limit=40)
+    assert b.ids[:4] == [1, 3, 2, 4]  # the new game, then the top one though it is due last, then by due date
+    assert b.free == {1, 3}
+
+
+async def test_a_game_is_worth_reading_with_scores_the_top_or_five_steam_reviews(sessions):
+    from app.models import Document
+    from app.profile.pipeline import readable
+
+    async with sessions() as s:
+        s.add_all([game(10, 5), game(11, 5, critic_count=3), game(12, 5, top_rank=1), game(13, 5), game(14, 5)])
+        await s.flush()
+        for i in range(5):
+            s.add(Document(game_id=13, source="steam_reviews", kind="user_review", ext_id=f"r{i}", text="t",
+                           text_hash=f"h{i}"))
+        for i in range(4):
+            s.add(Document(game_id=14, source="steam_reviews", kind="user_review", ext_id=f"q{i}", text="t",
+                           text_hash=f"g{i}"))
+        await s.commit()
+        got = {gid: await readable(s, await s.get(Game, gid), S) for gid in (10, 11, 12, 13, 14)}
+    assert got == {10: False, 11: True, 12: True, 13: True, 14: False}
