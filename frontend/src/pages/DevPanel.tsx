@@ -143,58 +143,79 @@ function ago(iso?: string | null): string {
   return h < 48 ? `${h} ч назад` : `${Math.round(h / 24)} дн назад`;
 }
 
-/** One tile per source: state, why, when it last worked, and 24 hours of calls (successes over failures). */
-function HealthTile({ s }: { s: HealthSource }) {
-  const peak = Math.max(1, ...s.hours.map((h) => h.ok + h.fail));
+const TIER_ORDER = ["new", "hot", "warm", "cool", "dormant", "archived"];
+const SERVICE = new Set(["worker", "backup", "server"]);
+
+/** 24 hourly slots, always all of them: an empty hour is a faint baseline, not a missing bar. */
+function HourBars({ hours }: { hours: { ok: number; fail: number }[] }) {
+  const slots = [...Array(Math.max(0, 24 - hours.length)).fill(null), ...hours];
+  const peak = Math.max(1, ...hours.map((h) => h.ok + h.fail));
+  const ok = hours.reduce((a, h) => a + h.ok, 0);
+  const fail = hours.reduce((a, h) => a + h.fail, 0);
+  return (
+    <div className="hbars" role="img" aria-label={`за 24 часа: ${ok} успешных, ${fail} с ошибкой`}>
+      {slots.map((h, i) => (
+        <span key={i} className={!h || h.ok + h.fail === 0 ? "hb-none" : ""}
+              title={h ? `${24 - i} ч назад: ${h.ok} успешных, ${h.fail} с ошибкой` : `${24 - i} ч назад: нет данных`}>
+          {h && h.fail > 0 && <i className="fail" style={{ height: `${Math.max(8, (h.fail / peak) * 100)}%` }} />}
+          {h && h.ok > 0 && <i className="ok" style={{ height: `${Math.max(8, (h.ok / peak) * 100)}%` }} />}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** One row per outside source; a click opens the details (last error, canary, since when). */
+function HealthRow({ s }: { s: HealthSource }) {
   const bad = s.state !== "ok" && s.state !== "unknown";
   return (
-    <article className={`htile is-${s.state}`}>
-      <header>
+    <details className={`hrow is-${s.state}`} open={bad && s.state === "down"}>
+      <summary>
         <span className="hdot" aria-hidden="true" />
-        <b>{s.label}</b>
+        <b className="hname">{s.label}</b>
         <span className="hstate">{STATE_LABEL[s.state]}</span>
-      </header>
-      <p className="hreason">{s.reason}</p>
-      {s.hours.length > 0 && (
-        <div className="hbars" role="img"
-             aria-label={`за 24 часа: ${s.hours.reduce((a, h) => a + h.ok, 0)} успешных, ${s.hours.reduce((a, h) => a + h.fail, 0)} с ошибкой`}>
-          {s.hours.map((h, i) => (
-            <span key={i} title={`${24 - i} ч назад: ${h.ok} успешных, ${h.fail} с ошибкой`}>
-              <i className="ok" style={{ height: `${(h.ok / peak) * 100}%` }} />
-              <i className="fail" style={{ height: `${(h.fail / peak) * 100}%` }} />
-            </span>
-          ))}
-        </div>
-      )}
-      <dl className="hmeta">
-        {s.hours.length > 0 && <div><dt>успех</dt><dd>{ago(s.last_ok)}</dd></div>}
-        {s.canary && <div><dt>контроль</dt><dd title={s.canary.detail}>{s.canary.ok ? "✓" : "✕"} {ago(s.canary.at)}</dd></div>}
-        {s.since && bad && <div><dt>с</dt><dd>{new Date(s.since).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</dd></div>}
+        <span className="hreason">{s.reason}</span>
+        <HourBars hours={s.hours} />
+        <span className="hlast">{s.last_ok ? `успех ${ago(s.last_ok)}` : "успехов нет"}</span>
+      </summary>
+      <dl className="hmore">
+        {s.since && <div><dt>в этом состоянии с</dt><dd>{new Date(s.since).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</dd></div>}
+        {s.canary && <div><dt>контрольный запрос</dt><dd>{s.canary.ok ? "прошёл" : "не прошёл"} {ago(s.canary.at)} · {s.canary.detail}</dd></div>}
+        {s.last_error?.err_text && <div><dt>последняя ошибка</dt><dd className="herr">{ago(s.last_error.err_at)} · {KIND_LABEL[s.last_error.err_kind ?? ""] ?? "ошибка"} · {s.last_error.err_text}</dd></div>}
+        {!s.since && !s.canary && !s.last_error?.err_text && <div><dt>подробностей нет</dt><dd>—</dd></div>}
       </dl>
-      {bad && s.last_error?.err_text && (
-        <p className="herror" title={s.last_error.err_text}>
-          {KIND_LABEL[s.last_error.err_kind ?? ""] ?? "ошибка"} · {s.last_error.err_text}
-        </p>
-      )}
-    </article>
+    </details>
   );
 }
 
 function HealthBlock({ data, error }: { data?: Health; error: boolean }) {
   const problems = data?.sources.filter((s) => s.state !== "ok" && s.state !== "unknown") ?? [];
+  const sources = data?.sources.filter((s) => !SERVICE.has(s.id)) ?? [];
+  const service = data?.sources.filter((s) => SERVICE.has(s.id)) ?? [];
   return (
     <section className="health" aria-label="Здоровье источников">
       <div className="health-head">
         <h2>Здоровье источников</h2>
-        <span className={`hsum is-${data?.status ?? "unknown"}`}>
+        <span className={`hsum is-${error ? "down" : data?.status ?? "unknown"}`}>
           {error ? "нет связи с API" : !data ? "загрузка…" : problems.length
             ? `проблем: ${problems.length} — ${problems.map((p) => p.label).join(", ")}`
             : "всё работает"}
         </span>
-        <span className="muted">{data?.checked_at ? `проверено ${ago(data.checked_at)} · каждый час в :45` : ""}</span>
+        <span className="hchecked">{data?.checked_at ? `проверено ${ago(data.checked_at)} · каждый час в :45` : ""}</span>
       </div>
-      <div className="health-grid">
-        {data?.sources.map((s) => <HealthTile key={s.id} s={s} />)}
+      <div className="hservice">
+        {service.map((s) => (
+          <article key={s.id} className={`hcard is-${s.state}`}>
+            <header><span className="hdot" aria-hidden="true" /><b>{s.label}</b><span className="hstate">{STATE_LABEL[s.state]}</span></header>
+            <p>{s.reason}</p>
+          </article>
+        ))}
+      </div>
+      <div className="hlist">
+        <div className="hlist-head" aria-hidden="true">
+          <span /><span>источник</span><span>состояние</span><span>почему</span><span>вызовы за 24 ч</span><span>последний успех</span>
+        </div>
+        {sources.map((s) => <HealthRow key={s.id} s={s} />)}
       </div>
     </section>
   );
@@ -294,11 +315,12 @@ export function DevPanel() {
           <b>{stats.data?.due_next_hour ?? "—"}</b>
           <span>игр к проверке в ближайший час</span>
         </div>
-        <div className="kpi">
+        <div className="kpi tiers">
           <b>
             {Object.entries(stats.data?.tiers ?? {})
-              .map(([t, n]) => `${t} ${n}`)
-              .join(" · ") || "—"}
+              .sort((x, y) => TIER_ORDER.indexOf(x[0]) - TIER_ORDER.indexOf(y[0]))
+              .map(([t, n]) => <span key={t}>{t} <em>{n.toLocaleString("ru-RU")}</em></span>)}
+            {!stats.data && "—"}
           </b>
           <span>игры по уровням</span>
         </div>
@@ -391,7 +413,17 @@ function detail(e: PipelineEvent): string {
     .map(([k, v]) => {
       if (k === "ms") return `${((v as number) / 1000).toFixed(2)}s`;
       if (k === "bytes") return `${Math.round((v as number) / 1024)}KB`;
-      return `${k}=${typeof v === "object" ? JSON.stringify(v) : v}`;
+      return `${k}=${typeof v === "object" ? compact(v) : v}`;
     })
     .join("  ");
+}
+
+/** {"mc":0,"steam_reviews":100} -> "mc 0, steam_reviews 100": nested values read as text, not as JSON. */
+function compact(v: unknown): string {
+  if (Array.isArray(v)) return v.map((x) => (typeof x === "object" ? compact(x) : String(x))).join(", ");
+  if (v && typeof v === "object")
+    return Object.entries(v as Record<string, unknown>)
+      .map(([k, x]) => `${k} ${typeof x === "object" && x !== null ? `(${compact(x)})` : String(x).slice(0, 90)}`)
+      .join(", ");
+  return String(v);
 }
