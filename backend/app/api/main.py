@@ -1,13 +1,14 @@
 import asyncio
 import hmac
+import json
 from contextlib import asynccontextmanager
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Literal
 
 from arq import create_pool
 from arq.connections import RedisSettings
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from redis.asyncio import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError
@@ -17,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import presence
 from app.core import clock
+from app.core import health as hs
 from app.core.config import get_settings
 from app.core.db import SessionLocal, init_db
 from app.models import (
@@ -67,8 +69,51 @@ def game_brief(g: Game) -> dict:
 
 
 @app.get("/api/health")
-async def health():
+async def health(request: Request, session: AsyncSession = Depends(db)):
+    """Liveness for an outside uptime check: 200 when the API reaches Postgres and Redis, 503 otherwise."""
+    problems = []
+    try:
+        await session.execute(text("SELECT 1"))
+    except Exception:  # noqa: BLE001
+        problems.append("postgres")
+    try:
+        await request.app.state.redis.ping()
+    except Exception:  # noqa: BLE001
+        problems.append("redis")
+    if problems:
+        return JSONResponse({"ok": False, "down": problems}, status_code=503)
     return {"ok": True}
+
+
+@app.get("/api/health/sources")
+async def health_sources(request: Request):
+    """Every source's state from the worker's hourly check, with 24 hourly counters, its canary and its last
+    success and error. The worker itself is judged here too: if it has not checked for 90 minutes, it is down."""
+    redis: Redis = request.app.state.redis
+    now = clock.now()
+    try:
+        raw = await redis.hgetall("health:state")
+        evaluated = await redis.get("health:evaluated_at")
+    except (RedisConnectionError, RedisTimeoutError):
+        raise HTTPException(503, "Redis недоступен") from None
+    out = []
+    for source, label in hs.SOURCES.items():
+        st = json.loads(raw[source]) if source in raw else {"state": "unknown", "reason": "ещё не проверялось"}
+        hours = await hs.counts(redis, source, now, 24) if source in hs.RULES else []
+        last = await redis.hgetall(f"health:last:{source}")
+        out.append({"id": source, "label": label, **st, "canary": await hs.read_canary(redis, source),
+                    "last_ok": last.get("ok_at"), "last_error": {k: last[k] for k in ("err_at", "err_kind", "err_text")
+                                                                 if k in last} or None,
+                    "hours": [{"ok": h.get("ok", 0), "fail": sum(v for k, v in h.items() if k not in ("ok", "paused"))}
+                              for h in hours]})
+    age_min = (now - datetime.fromisoformat(evaluated)).total_seconds() / 60 if evaluated else None
+    if age_min is None or age_min > 90:
+        w = next(x for x in out if x["id"] == "worker")
+        w["state"] = "down"
+        w["reason"] = (f"проверка здоровья не запускалась {round(age_min)} мин" if age_min is not None
+                       else "проверка здоровья ещё не запускалась")
+    return {"checked_at": evaluated, "status": hs.worst([x["state"] for x in out if x["state"] != "unknown"]),
+            "sources": out}
 
 
 @app.get("/api/platforms")

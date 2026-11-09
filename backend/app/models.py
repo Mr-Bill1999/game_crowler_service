@@ -68,6 +68,12 @@ class Game(Base):
     top_rank: Mapped[int | None] = mapped_column(Integer, index=True)
     top_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # Quarantine (app/pipeline/quarantine.py): failed refreshes and essences in a row, and when to try again.
+    fail_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    last_error: Mapped[str | None] = mapped_column(String(300))
+    facet_fail_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    facet_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     platforms: Mapped[list["GamePlatform"]] = relationship(
         back_populates="game", cascade="all, delete-orphan", lazy="selectin"
     )

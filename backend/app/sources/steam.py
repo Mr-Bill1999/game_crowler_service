@@ -6,7 +6,10 @@ sampled across recommend x hours cells, so a hundred reviews cover quitters and 
 """
 
 import html
+import json
 import re
+import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -16,6 +19,13 @@ STORE = "https://store.steampowered.com"
 API = "https://api.steampowered.com"
 COOKIES = {"birthtime": "568022401", "mature_content": "1", "wants_mature_content": "1"}  # past the age gate
 HOUR_BANDS = (2, 10, 50)  # < 2 h: the refund window; 2-10; 10-50; 50+
+# Player reviews moved to the Web API in October 2026: store.steampowered.com/appreviews now redirects to the store
+# front page. Same fields, parameters as JSON in input_json, enums as numbers (Steamworks docs, IUserReviewsService).
+REVIEWS_API = f"{API}/IUserReviewsService/GetAppReviews/v1/"
+FILTER_RECENT, PURCHASE_ALL, REVIEW_ALL = 1, 1, 0
+CANARY_APP = 730  # Counter-Strike 2: always on sale, always reviewed, always in the news
+PAUSE_AFTER = 5  # consecutive failures of one endpoint...
+PAUSE_S = 3600  # ...pause it for an hour, then one call decides
 
 
 def clean(s: str | None) -> str:
@@ -120,16 +130,71 @@ def parse_news(data: dict) -> list[dict]:
     return out
 
 
+class SourcePaused(Exception):
+    """An endpoint failed PAUSE_AFTER times in a row: skipped until its pause ends, instead of hammering it."""
+
+    def __init__(self, part: str, until: float):
+        super().__init__(f"{part} paused for {max(0, round((until - time.monotonic()) / 60))} min after "
+                         f"{PAUSE_AFTER} failures in a row")
+        self.part = part
+
+
+class Breaker:
+    """Per endpoint: consecutive failures, and a pause once there are too many. One worker, one instance."""
+
+    def __init__(self, on_pause: Callable[[str, str], Awaitable[None]] | None = None):
+        self.fails: dict[str, int] = {}
+        self.until: dict[str, float] = {}
+        self.on_pause = on_pause
+
+    def check(self, part: str) -> None:
+        if self.until.get(part, 0) > time.monotonic():
+            raise SourcePaused(part, self.until[part])
+
+    async def result(self, part: str, error: Exception | None) -> None:
+        if error is None:
+            self.fails[part], self.until[part] = 0, 0
+            return
+        self.fails[part] = self.fails.get(part, 0) + 1
+        if self.fails[part] >= PAUSE_AFTER and self.until.get(part, 0) <= time.monotonic():
+            self.until[part] = time.monotonic() + PAUSE_S
+            if self.on_pause:
+                await self.on_pause(part, f"{type(error).__name__}: {error}"[:300])
+
+
+def reviews_input(appid: int, cursor: str, per_page: int = 100) -> dict:
+    return {"appid": appid, "filter": FILTER_RECENT, "languages": ["all"], "review_type": REVIEW_ALL,
+            "purchase_type": PURCHASE_ALL, "num_per_page": per_page, "cursor": cursor}
+
+
+def unwrap(j: dict) -> dict:
+    """Web API answers come as {"response": {...}}; tolerate both shapes."""
+    return j.get("response", j) if isinstance(j, dict) else {}
+
+
 class Steam:
-    def __init__(self, rps: float, min_words: int = 15):
+    def __init__(self, rps: float, min_words: int = 15,
+                 on_pause: Callable[[str, str], Awaitable[None]] | None = None):
         self.web = WebClient("steam", rps)
         self.min_words = min_words
+        self.breaker = Breaker(on_pause)
 
     async def aclose(self) -> None:
         await self.web.aclose()
 
+    async def _guarded(self, part: str, call: Callable[[], Awaitable]):
+        self.breaker.check(part)
+        try:
+            out = await call()
+        except Exception as e:
+            await self.breaker.result(part, e)
+            raise
+        await self.breaker.result(part, None)
+        return out
+
     async def find(self, title: str) -> list[dict]:
-        j = await self.web.get_json(f"{STORE}/api/storesearch/", {"term": title, "cc": "us", "l": "english"})
+        j = await self._guarded("steam_store", lambda: self.web.get_json(
+            f"{STORE}/api/storesearch/", {"term": title, "cc": "us", "l": "english"}, health_as="steam_store"))
         return j.get("items") or []
 
     async def resolve(self, title: str, developer: str | None) -> tuple[int | None, dict]:
@@ -143,17 +208,23 @@ class Steam:
         return None, {"candidates": [it.get("name") for it in items[:5]]}
 
     async def store(self, appid: int) -> StorePage:
-        data = await self.web.get_json(f"{STORE}/api/appdetails", {"appids": appid, "cc": "us", "l": "english"})
-        page = await self.web.get_text(f"{STORE}/app/{appid}/", cookies=COOKIES)
-        return parse_store(appid, data, page["text"])
+        async def call():
+            data = await self.web.get_json(f"{STORE}/api/appdetails", {"appids": appid, "cc": "us", "l": "english"},
+                                           health_as="steam_store")
+            page = await self.web.get_text(f"{STORE}/app/{appid}/", cookies=COOKIES, health_as="steam_store")
+            return parse_store(appid, data, page["text"])
+
+        return await self._guarded("steam_store", call)
 
     async def reviews(self, appid: int, pages: int, known: set[str]) -> tuple[list[SteamReview], dict]:
         """Newest reviews, page by page, until a known one or `pages` pages; plus the totals Steam reports."""
         out, cursor, summary = [], "*", {}
         for _ in range(pages):
-            j = await self.web.get_json(f"{STORE}/appreviews/{appid}", {
-                "json": 1, "filter": "recent", "language": "all", "purchase_type": "all", "review_type": "all",
-                "num_per_page": 100, "cursor": cursor})
+            params = {"input_json": json.dumps(reviews_input(appid, cursor), separators=(",", ":"))}
+            j = unwrap(await self._guarded("steam_reviews", lambda p=params: self.web.get_json(
+                REVIEWS_API, p, health_as="steam_reviews")))
+            if "reviews" not in j and "query_summary" not in j:
+                raise ValueError(f"GetAppReviews: unexpected answer, keys {sorted(j)[:6]}")
             summary = summary or j.get("query_summary") or {}
             batch = j.get("reviews") or []
             fresh = parse_reviews(j, self.min_words)
@@ -167,6 +238,33 @@ class Steam:
         return out, totals
 
     async def news(self, appid: int) -> list[dict]:
-        j = await self.web.get_json(f"{API}/ISteamNews/GetNewsForApp/v2/", {"appid": appid, "count": 15,
-                                                                            "maxlength": 0})
+        j = await self._guarded("steam_news", lambda: self.web.get_json(
+            f"{API}/ISteamNews/GetNewsForApp/v2/", {"appid": appid, "count": 15, "maxlength": 0},
+            health_as="steam_news"))
         return parse_news(j)
+
+    # ---------- canaries: one small request each, with a check of the answer's shape ----------
+
+    async def canary_reviews(self) -> str:
+        params = {"input_json": json.dumps(reviews_input(CANARY_APP, "*", per_page=1), separators=(",", ":"))}
+        j = unwrap(await self.web.get_json(REVIEWS_API, params, health_as="steam_reviews"))
+        total = (j.get("query_summary") or {}).get("total_reviews")
+        if not j.get("reviews") or not total:
+            raise ValueError(f"GetAppReviews {CANARY_APP}: no reviews in the answer")
+        return f"CS2: {total} отзывов, ответ в норме"
+
+    async def canary_store(self) -> str:
+        j = await self.web.get_json(f"{STORE}/api/appdetails", {"appids": CANARY_APP, "cc": "us", "l": "english"},
+                                    health_as="steam_store")
+        d = (j.get(str(CANARY_APP)) or {})
+        if not d.get("success") or not (d.get("data") or {}).get("name"):
+            raise ValueError(f"appdetails {CANARY_APP}: success={d.get('success')}")
+        return f"appdetails: {d['data']['name']}"
+
+    async def canary_news(self) -> str:
+        j = await self.web.get_json(f"{API}/ISteamNews/GetNewsForApp/v2/", {"appid": CANARY_APP, "count": 1,
+                                                                            "maxlength": 1}, health_as="steam_news")
+        items = (j.get("appnews") or {}).get("newsitems")
+        if items is None:
+            raise ValueError("GetNewsForApp: no appnews.newsitems")
+        return f"новостей в ответе: {len(items)}"

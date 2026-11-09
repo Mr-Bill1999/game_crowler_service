@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from app.core import faults, tape
+from app.core import faults, health, tape
 
 API = "https://www.googleapis.com/youtube/v3"
 RESULTS_PER_QUERY = 10
@@ -181,6 +181,10 @@ class YouTube:
         await self.http.aclose()
 
     async def _get(self, path: str, params: dict) -> dict:
+        async with health.track("youtube"):
+            return await self._get_untracked(path, params)
+
+    async def _get_untracked(self, path: str, params: dict) -> dict:
         if kind := faults.pick("youtube"):
             try:
                 return self._json_of(faults.http_response(kind, f"{API}{path}"))

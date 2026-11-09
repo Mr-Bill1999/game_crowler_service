@@ -13,11 +13,11 @@ from app.core.config import Settings
 from app.models import Document, Evidence, Game, GameLink, GameProfile, ProfileCall, Review
 from app.pipeline.quota import quota_day
 from app.profile import build as builder
-from app.profile.collect import critic_docs, metacritic_docs, steam_docs, steam_link
+from app.profile.collect import STEAM_PARTS, critic_docs, metacritic_docs, steam_link
 from app.profile.evidence import Doc, extract
 from app.profile.fullness import Point, band, fullness, missing
 from app.sources.critics import Critics
-from app.sources.steam import Steam
+from app.sources.steam import SourcePaused, Steam
 
 log = logging.getLogger(__name__)
 SOURCES = ["mc", "steam_store", "steam_reviews", "steam_news", "critic_full"]
@@ -107,21 +107,39 @@ async def collect_all(sessions, steam: Steam, critics: Critics, s: Settings, gam
         game = await session.get(Game, game_id)
         res.collected["mc"] = await metacritic_docs(session, game, now)
         await session.commit()
-    for name, step in (("steam", "steam"), ("critic_full", "critics")):
+    try:  # the link first, committed on its own: the parts below each need it, and none may lose it
+        async with sessions() as session:
+            game = await session.get(Game, game_id)
+            link = await steam_link(session, steam, game, now)
+            appid = int(link.external_id) if link.external_id else None
+            await session.commit()
+    except Exception as e:  # noqa: BLE001 - one platform failing keeps what the others gave
+        appid = None
+        _collect_failed(res, "steam_link", game_id, e)
+    for part, collect in (STEAM_PARTS if appid else ()):
         try:
             async with sessions() as session:
                 game = await session.get(Game, game_id)
-                if step == "steam":
-                    link = await steam_link(session, steam, game, now)
-                    if link.external_id:
-                        res.collected.update(await steam_docs(session, steam, s, game, int(link.external_id), link,
-                                                              now))
-                else:
-                    res.collected["critic_full"] = await critic_docs(session, critics, s, game, now)
+                link = await session.get(GameLink, (game_id, "steam"))
+                res.collected[part] = await collect(session, steam, s, game, appid, link, now)
                 await session.commit()
-        except Exception as e:  # one platform failing keeps what the others gave
-            log.exception("collect %s failed: %s", name, game_id)
-            res.errors[name] = f"{type(e).__name__}: {e}"[:300]
+        except Exception as e:  # noqa: BLE001
+            _collect_failed(res, part, game_id, e)
+    try:
+        async with sessions() as session:
+            game = await session.get(Game, game_id)
+            res.collected["critic_full"] = await critic_docs(session, critics, s, game, now)
+            await session.commit()
+    except Exception as e:  # noqa: BLE001
+        _collect_failed(res, "critic_full", game_id, e)
+
+
+def _collect_failed(res: EnrichResult, part: str, game_id: int, e: Exception) -> None:
+    if isinstance(e, SourcePaused):  # already reported once, when the pause began
+        res.errors[part] = "paused"
+        return
+    log.warning("collect %s failed for %s: %s: %s", part, game_id, type(e).__name__, str(e)[:200])
+    res.errors[part] = f"{type(e).__name__}: {e}"[:300]
 
 
 async def extract_new(sessions, provider, s: Settings, game: Game, res: EnrichResult) -> None:

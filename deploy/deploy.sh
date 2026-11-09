@@ -5,7 +5,10 @@
 #   deploy/deploy.sh install-docker   Docker Engine + Compose plugin from the distribution's packages
 #   deploy/deploy.sh up               ship the committed code, write deploy/.env, build and start the stack
 #   deploy/deploy.sh db-copy          replace the server's database with a dump of the local working one
-#   deploy/deploy.sh status | logs [service] | backup
+#   deploy/deploy.sh status | logs [service]
+#   deploy/deploy.sh backup           a backup now (deploy/backup.sh on the server)
+#   deploy/deploy.sh install-timers   nightly backup and weekly restore check as systemd timers on the server
+#   deploy/deploy.sh install-mac-pull a daily copy of the server's backups to this Mac (launchd)
 #
 # Settings: GA_HOST or deploy/.host (user@server, kept out of git), GA_KEY (default ~/.ssh/ga_deploy),
 # GA_DIR (default /opt/gameanalytics)
@@ -41,7 +44,8 @@ write_env() {
   printf '%s\n' "$keys" | remote "set -e; umask 077; mkdir -p $DIR/deploy
     old=\$(grep -E '^POSTGRES_PASSWORD=' $DIR/deploy/.env 2>/dev/null || true)
     pw=\${old:-POSTGRES_PASSWORD=\$(openssl rand -hex 24)}
-    { echo \"\$pw\"; cat; } > $DIR/deploy/.env.new && mv $DIR/deploy/.env.new $DIR/deploy/.env
+    keep=\$(grep -E '^GA_PROFILE_TOKEN_SHARE=' $DIR/deploy/.env 2>/dev/null || true)  # set on the server only
+    { echo \"\$pw\"; [ -n \"\$keep\" ] && echo \"\$keep\"; cat; } > $DIR/deploy/.env.new && mv $DIR/deploy/.env.new $DIR/deploy/.env
     chmod 600 $DIR/deploy/.env; echo \"deploy/.env: \$(grep -c = $DIR/deploy/.env) settings, values not shown\""
 }
 
@@ -69,9 +73,22 @@ db_copy() {
 }
 
 backup() {
-  remote "set -e; cd $DIR; f=/backups/ga-\$(date +%F-%H%M).dump
-    $DC exec -T postgres pg_dump -U ga -Fc gameanalytics -f \$f && ls -lh deploy/backups | tail -3
-    find deploy/backups -name 'ga-*.dump' -mtime +14 -delete"
+  remote "$DIR/deploy/backup.sh"
+}
+
+install_timers() {
+  remote "set -e; cp $DIR/deploy/systemd/ga-*.service $DIR/deploy/systemd/ga-*.timer /etc/systemd/system/
+    systemctl daemon-reload; systemctl enable --now ga-backup.timer ga-restore-check.timer
+    systemctl list-timers --no-pager | grep -E 'ga-(backup|restore)'"
+}
+
+install_mac_pull() {
+  local plist=$HOME/Library/LaunchAgents/com.gamegallery.backups.plist
+  mkdir -p "$HOME/GameGallery-backups" "$HOME/Library/LaunchAgents"
+  sed -e "s#REPO#$PWD#" -e "s#HOME#$HOME#" deploy/mac/com.gamegallery.backups.plist > "$plist"
+  launchctl unload "$plist" 2>/dev/null || true
+  launchctl load "$plist"
+  echo "launchd: com.gamegallery.backups, daily at 12:00, log in ~/GameGallery-backups/pull.log"
 }
 
 case ${1:-help} in
@@ -82,5 +99,7 @@ case ${1:-help} in
   status) remote "cd $DIR && $DC ps" ;;
   logs) remote "cd $DIR && $DC logs --tail 100 ${2:-}" ;;
   backup) backup ;;
-  *) sed -n '2,12p' "$0" ;;
+  install-timers) install_timers ;;
+  install-mac-pull) install_mac_pull ;;
+  *) sed -n '2,15p' "$0" ;;
 esac

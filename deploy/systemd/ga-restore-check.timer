@@ -1,0 +1,9 @@
+[Unit]
+Description=GameGallery weekly restore check, Sunday 05:30 UTC
+
+[Timer]
+OnCalendar=Sun *-*-* 05:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

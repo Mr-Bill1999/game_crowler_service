@@ -27,17 +27,21 @@ from app.core import clock
 from app.core.config import Settings
 from app.events.bus import EventBus
 from app.models import FACET_DIM, Game, GameFacets
+from app.pipeline.quarantine import essence_failed, essence_ok
 from app.pipeline.quota import quota_day
 
 FACETS = ("gameplay", "world")
 PER_MINUTE_PAUSE_S = 62  # embeddings: 100 texts a minute per model
 
 
-async def stale_games(session: AsyncSession, limit: int) -> list[Game]:
-    """Games with a usable description and no essence, or one built from an older description; newest first."""
+async def stale_games(session: AsyncSession, limit: int, now: datetime | None = None) -> list[Game]:
+    """Games with a usable description and no essence, or one built from an older description; newest first.
+    Games in quarantine (the model failed on them several times in a row) wait until their pause ends."""
+    now = now or clock.now()
     rows = (await session.execute(
         select(Game, GameFacets.source_hash).outerjoin(GameFacets, GameFacets.game_id == Game.id)
-        .where(func.length(func.coalesce(Game.description, "")) >= MIN_DESCRIPTION)
+        .where(func.length(func.coalesce(Game.description, "")) >= MIN_DESCRIPTION,
+               (Game.facet_retry_at.is_(None)) | (Game.facet_retry_at <= now))
         .order_by(Game.release_date.desc().nulls_last(), Game.id))).all()
     return [g for g, h in rows if h != source_hash(g)][:limit]
 
@@ -54,7 +58,10 @@ async def build_essences(provider: GeminiProvider, games: list[Game], s: Setting
                                              thinking_level=s.llm_thinking_level, max_output_tokens=2048)
         except Exception as e:  # noqa: BLE001 - one game failing must not stop the others
             stats["error"] += 1
-            await bus.emit("facets.essence", "error", slug=g.slug, error=f"{type(e).__name__}: {e}"[:300])
+            async with sessions() as session:
+                q = await essence_failed(session, g.id, clock.now())
+            await bus.emit("facets.essence", "error", slug=g.slug, error=f"{type(e).__name__}: {e}"[:300],
+                           fails=q["fails"], paused_h=q["paused_h"])
             return
         e = finish_essence(clean_tags(r.data), title=g.title, genres=g.genres or [], description=g.description or "",
                            known_series=known_series)
@@ -64,6 +71,7 @@ async def build_essences(provider: GeminiProvider, games: list[Game], s: Setting
             row.confidence, row.source_hash, row.model = e.get("confidence"), source_hash(g), r.model
             row.tokens_in, row.tokens_out, row.essence_at = r.tokens_in, r.tokens_out, clock.now()
             session.add(row)
+            await essence_ok(session, g.id)
             await session.commit()
         stats["ok"] += 1
         stats["tokens_in"] += r.tokens_in

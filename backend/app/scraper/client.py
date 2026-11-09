@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from app.core import faults, tape
+from app.core import faults, health, tape
 from app.core.config import Settings
 from app.events.bus import EventBus
 
@@ -54,6 +54,11 @@ class MCClient:
 
     async def get_json(self, stage: str, path: str, params: dict[str, Any] | None = None,
                        slug: str | None = None) -> dict:
+        async with health.track("metacritic"):
+            return await self._get_json(stage, path, params, slug)
+
+    async def _get_json(self, stage: str, path: str, params: dict[str, Any] | None = None,
+                        slug: str | None = None) -> dict:
         last_status: int | None = None
         reason = "no response"
         for attempt in range(1, self.s.max_attempts + 1):

@@ -199,7 +199,22 @@ export type Presence = {
   online_window_s: number;
 };
 
+export type HealthState = "ok" | "degraded" | "stale" | "quota" | "down" | "unknown";
+export type HealthSource = {
+  id: string;
+  label: string;
+  state: HealthState;
+  reason: string;
+  since?: string;
+  canary: { at: string; ok: boolean; detail: string; ms: number } | null;
+  last_ok: string | null;
+  last_error: { err_at?: string; err_kind?: string; err_text?: string } | null;
+  hours: { ok: number; fail: number }[];
+};
+export type Health = { checked_at: string | null; status: HealthState; sources: HealthSource[] };
+
 export const api = {
+  health: () => request<Health>("/api/health/sources"),
   games: (params: URLSearchParams) => request<{ total: number; items: GameBrief[] }>(`/api/games?${params}`),
   platforms: () => request<{ name: string; games: number }[]>("/api/platforms"),
   game: (slug: string) => request<GameDetail>(`/api/games/${slug}`),

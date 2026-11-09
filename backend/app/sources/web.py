@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 
-from app.core import faults, tape
+from app.core import faults, health, tape
 
 RETRYABLE = {429, 500, 502, 503, 504}
 UA_BOT = "GameAnalytics/1.0 (+https://github.com/Mr-Bill1999/game_crowler_service)"
@@ -45,17 +45,19 @@ class WebClient:
         if at > now:
             await asyncio.sleep(at - now)
 
-    async def _once(self, url: str, params: dict | None, headers: dict, cookies: dict | None) -> httpx.Response:
+    async def _once(self, url: str, params: dict | None, headers: dict, cookies: dict | None,
+                    follow: bool = True) -> httpx.Response:
         if kind := faults.pick(self.source):
             return faults.http_response(kind, url)
         await self._pace(httpx.URL(url).host)
-        return await self.http.get(url, params=params, headers=headers, cookies=cookies)
+        return await self.http.get(url, params=params, headers=headers, cookies=cookies, follow_redirects=follow)
 
-    async def _get(self, url: str, params: dict | None, headers: dict, cookies: dict | None) -> httpx.Response:
+    async def _get(self, url: str, params: dict | None, headers: dict, cookies: dict | None,
+                   follow: bool = True) -> httpx.Response:
         reason, status = "no response", None
         for attempt in range(1, self.attempts + 1):
             try:
-                r = await self._once(url, params, headers, cookies)
+                r = await self._once(url, params, headers, cookies, follow)
             except httpx.HTTPError as e:
                 reason, status = type(e).__name__, None
             else:
@@ -71,23 +73,36 @@ class WebClient:
         raise WebError(url, status, reason)
 
     async def get_json(self, url: str, params: dict | None = None, *, browser: bool = False,
-                       cookies: dict | None = None) -> Any:
+                       cookies: dict | None = None, health_as: str | None = None) -> Any:
+        """An API answer. Redirects are not followed: an API that redirects has moved or been switched off (Steam's
+        /appreviews went to the store front page in October 2026), and following it would hand back a web page."""
         async def live():
-            r = await self._get(url, params, {"User-Agent": UA_BROWSER if browser else UA_BOT}, cookies)
-            if r.status_code != 200:
-                raise WebError(url, r.status_code, "not OK")
-            try:
-                return r.json()
-            except ValueError:
-                raise WebError(url, r.status_code, "not JSON (a Cloudflare page or a changed API)") from None
+            async with health.track(health_as or self.source):
+                r = await self._get(url, params, {"User-Agent": UA_BROWSER if browser else UA_BOT}, cookies,
+                                    follow=False)
+                if r.is_redirect:
+                    raise WebError(url, r.status_code, f"redirected to {r.headers.get('location', '?')[:120]}")
+                if r.status_code != 200:
+                    raise WebError(url, r.status_code, "not OK")
+                try:
+                    return r.json()
+                except ValueError:
+                    kind = r.headers.get("content-type", "?").split(";")[0]
+                    raise WebError(url, r.status_code, f"not JSON ({kind})") from None
 
         return await tape.call(self.source, {"url": url, "params": params or {}}, live, summary=url[:200])
 
     async def get_text(self, url: str, params: dict | None = None, *, browser: bool = True,
-                       cookies: dict | None = None) -> dict:
+                       cookies: dict | None = None, health_as: str | None = None) -> dict:
         """{"status", "text", "url"}: pages are judged by the caller (a 404 or a paywall is an answer, not a fault)."""
         async def live():
-            r = await self._get(url, params, {"User-Agent": UA_BROWSER if browser else UA_BOT}, cookies)
+            try:
+                r = await self._get(url, params, {"User-Agent": UA_BROWSER if browser else UA_BOT}, cookies)
+            except Exception as e:
+                await health.record(health_as or self.source, health.classify(e), str(e))
+                raise
+            await health.record(health_as or self.source, "ok" if r.status_code == 200 else health.classify(
+                WebError(url, r.status_code, "page")), f"{r.status_code}: {url[:200]}")
             return {"status": r.status_code, "text": r.text if r.status_code == 200 else "", "url": str(r.url)}
 
         return await tape.call(self.source, {"url": url, "params": params or {}, "text": True}, live,

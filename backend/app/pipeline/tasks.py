@@ -16,14 +16,16 @@ from app.ai.analyze import essence, load_reviews
 from app.ai.deep import absolute_facts, run_deep, search_queries
 from app.ai.gemini import GeminiProvider
 from app.ai.lifecycle import analyze_kind, latest_analyses, metacritic_user_summary
-from app.core import clock
+from app.core import clock, health
 from app.core.config import get_settings
 from app.core.db import SessionLocal, init_db
 from app.events.bus import EventBus, current_run_id
 from app.models import Analysis, DeepAnalysis, Game, PipelineRun, SimilarGame
 from app.pipeline.discovery import discover_bootstrap, discover_hourly, discover_sweep
 from app.pipeline.facets import build_essences, embed_pending, refinish_all, stale_games
+from app.pipeline.healthcheck import evaluate, run_canaries
 from app.pipeline.ingest import Deps, IngestResult, ingest_game
+from app.pipeline.quarantine import card_failed, cards_ok
 from app.pipeline.quota import FREE_STATUSES
 from app.pipeline.similarity import rebuild
 from app.pipeline.top import record_top
@@ -48,8 +50,15 @@ async def startup(ctx: dict) -> None:
     redis = Redis.from_url(s.redis_url, decode_responses=True)
     bus = EventBus(redis, s.events_stream, s.events_maxlen)
     client = MCClient(s, bus)
+    health.attach(redis)
+
+    async def paused(part: str, error: str) -> None:
+        await health.record(part, "paused", error)
+        await bus.emit(f"health.{part}", "error", paused_min=60, error=error,
+                       reason="5 отказов подряд: пауза на час, потом одна пробная попытка")
+
     ctx.update(deps=Deps(s, Metacritic(client, s), bus, SessionLocal), _client=client, _bus_redis=redis,
-               steam=Steam(s.steam_rps, s.steam_review_min_words), critics=Critics(s.critic_rps))
+               steam=Steam(s.steam_rps, s.steam_review_min_words, on_pause=paused), critics=Critics(s.critic_rps))
     if not ctx.get("cli"):  # the worker starting: none of its runs can still be in progress
         async with SessionLocal() as session:
             if lost := await close_lost_runs(session, datetime.now(UTC), worker_restarted=True):
@@ -115,14 +124,20 @@ async def _ingest_many(ctx: dict, items: list[tuple[str, str | None]]) -> dict:
         async with gate:
             try:
                 return await ingest_game(d, slug, source)
-            except Exception as e:
-                log.exception("ingest failed: %s", slug)
-                await d.bus.emit("card.error", "error", slug=slug, error=f"{type(e).__name__}: {e}"[:300])
+            except Exception as e:  # noqa: BLE001 - one card failing must not stop the run
+                log.warning("ingest failed: %s: %s: %s", slug, type(e).__name__, str(e)[:200])
+                async with d.sessions() as session:
+                    q = await card_failed(session, slug, e, clock.now())
+                await d.bus.emit("card.error", "error", slug=slug, error=f"{type(e).__name__}: {e}"[:300],
+                                 fails=q and q["fails"], paused_h=q and q.get("paused_h"),
+                                 archived=q and q.get("archived"))
                 return None
 
     t0 = datetime.now(UTC)
     results = await asyncio.gather(*(one(slug, src) for slug, src in items))
     ok = [r for r in results if r]
+    async with d.sessions() as session:
+        await cards_ok(session, [slug for (slug, _), r in zip(items, results, strict=True) if r])
     for r in ok:
         if r.analyze:
             await ctx["redis"].enqueue_job("analyze_game", r.game_id, current_run_id.get(),
@@ -427,6 +442,26 @@ async def enrich_due(ctx: dict, limit: int | None = None) -> dict:
             "backlog": batch.backlog, "backlog_remaining": batch.backlog_remaining, "stopped": stopped}
 
 
+async def check_health(ctx: dict) -> dict:
+    """Hourly at :45: canaries against Metacritic and Steam, freshness, backups, memory and disk; one state per
+    source in Redis for DevPanel, and an event whenever a state changes."""
+    d: Deps = ctx["deps"]
+    redis = ctx["_bus_redis"]
+    now = clock.now()
+    canaries = await run_canaries(redis, d.mc, ctx["steam"], now)
+    async with d.sessions() as session:
+        states = await evaluate(redis, session, now, canaries)
+    changed = await health.save_states(redis, states, now)
+    for source, st in changed.items():
+        await d.bus.emit(f"health.{source}", health.EVENT_STATUS[st["state"]], state=st["state"], was=st["was"],
+                         reason=st["reason"])
+    summary = {k: v["state"] for k, v in states.items()}
+    bad = {k: v for k, v in summary.items() if v not in ("ok", "unknown")}
+    await d.bus.emit("health.check", "error" if "down" in bad.values() else ("retry" if bad else "ok"),
+                     problems=bad or None, changed=list(changed) or None)
+    return summary
+
+
 _s = get_settings()
 
 
@@ -440,10 +475,12 @@ class WorkerSettings:
         func(update_facets, timeout=RUN_TIMEOUT, keep_result=0),
         func(enrich_game, keep_result=0),
         func(enrich_due, timeout=RUN_TIMEOUT, keep_result=0),
+        func(check_health, timeout=300, keep_result=0),
     ]
     cron_jobs = [
         cron(run_hourly, minute=0, timeout=RUN_TIMEOUT, unique=True, job_id="cron:hourly"),
         cron(run_sweep, hour=4, minute=30, timeout=RUN_TIMEOUT, unique=True, job_id="cron:sweep"),
+        cron(check_health, minute=45, timeout=300, unique=True, job_id="cron:health"),
     ] if _s.cron_enabled else []  # the stand runs cycles on command, on its frozen clock
     on_startup = startup
     on_shutdown = shutdown

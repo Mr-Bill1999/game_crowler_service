@@ -55,4 +55,8 @@ MIGRATIONS = [
     "ALTER TABLE game_profiles ADD COLUMN IF NOT EXISTS first_enriched_at timestamptz",
     "UPDATE game_profiles SET first_enriched_at = enriched_at WHERE first_enriched_at IS NULL",
     "CREATE INDEX IF NOT EXISTS ix_game_profiles_first_enriched_at ON game_profiles (first_enriched_at)",
+    "ALTER TABLE games ADD COLUMN IF NOT EXISTS fail_count integer NOT NULL DEFAULT 0",
+    "ALTER TABLE games ADD COLUMN IF NOT EXISTS last_error varchar(300)",
+    "ALTER TABLE games ADD COLUMN IF NOT EXISTS facet_fail_count integer NOT NULL DEFAULT 0",
+    "ALTER TABLE games ADD COLUMN IF NOT EXISTS facet_retry_at timestamptz",
 ]

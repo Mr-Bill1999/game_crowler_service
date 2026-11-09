@@ -76,16 +76,18 @@ async def steam_link(session, steam: Steam, game: Game, now: datetime) -> GameLi
     return link
 
 
-async def steam_docs(session, steam: Steam, s: Settings, game: Game, appid: int, link: GameLink,
-                     now: datetime) -> dict:
-    stats = {}
+async def steam_store_docs(session, steam: Steam, s: Settings, game: Game, appid: int, link: GameLink,
+                           now: datetime) -> int:
     page = await steam.store(appid)
-    stats["steam_store"] = (
-        await upsert(session, game.id, "steam_store", "store_text", f"{appid}:about", page.about, now=now)
-        if page.about else 0) + await upsert(session, game.id, "steam_store", "store_meta", f"{appid}:meta",
-                                             page.meta, now=now)
+    added = (await upsert(session, game.id, "steam_store", "store_text", f"{appid}:about", page.about, now=now)
+             if page.about else 0) + await upsert(session, game.id, "steam_store", "store_meta", f"{appid}:meta",
+                                                  page.meta, now=now)
     link.info = {**(link.info or {}), "tags": page.tags, "release": page.release}
+    return added
 
+
+async def steam_review_docs(session, steam: Steam, s: Settings, game: Game, appid: int, link: GameLink,
+                            now: datetime) -> int:
     known = set((await session.execute(select(Document.ext_id).where(
         Document.game_id == game.id, Document.source == "steam_reviews"))).scalars())
     fresh, totals = await steam.reviews(appid, s.steam_review_pages if not known else 2, known)
@@ -96,15 +98,23 @@ async def steam_docs(session, steam: Steam, s: Settings, game: Game, appid: int,
         added += await upsert(session, game.id, "steam_reviews", "user_review", r.id, r.text,
                               {"voted_up": r.voted_up, "hours": r.hours, "lang": r.lang,
                                "early_access": r.early_access}, posted_at=r.posted_at, now=now)
-    stats["steam_reviews"] = added
-    link.info = {**link.info, "reviews": totals}
+    link.info = {**(link.info or {}), "reviews": totals}
+    return added
 
+
+async def steam_news_docs(session, steam: Steam, s: Settings, game: Game, appid: int, link: GameLink,
+                          now: datetime) -> int:
     added = 0
     for n in await steam.news(appid):
         added += await upsert(session, game.id, "steam_news", "dev_news", n["gid"], f"{n['title']}\n{n['text']}",
                               posted_at=n["date"], now=now)
-    stats["steam_news"] = added
-    return stats
+    return added
+
+
+# Each part is saved on its own: one Steam endpoint failing (reviews, October 2026) must not take the store page
+# and the news down with it, as it did while the three shared one transaction.
+STEAM_PARTS = (("steam_store", steam_store_docs), ("steam_reviews", steam_review_docs),
+               ("steam_news", steam_news_docs))
 
 
 async def critic_docs(session, critics: Critics, s: Settings, game: Game, now: datetime) -> int:

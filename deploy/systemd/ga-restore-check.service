@@ -1,0 +1,8 @@
+[Unit]
+Description=GameGallery weekly restore check of the newest backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/gameanalytics/deploy/restore-check.sh

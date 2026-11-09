@@ -85,9 +85,15 @@ def _cover(item: dict, image_base: str) -> str | None:
     return f"{image_base}{main['bucketPath']}" if main else None
 
 
+class EmptyCard(ValueError):
+    """Metacritic answers the card without the product: the page is gone or not public any more."""
+
+
 def parse_composer(data: dict, image_base: str) -> GameCard:
-    comps = {c["meta"]["componentName"]: c.get("data") or {} for c in data["components"]}
-    item = comps["product"]["item"]
+    comps = {c["meta"]["componentName"]: c.get("data") or {} for c in data.get("components") or []}
+    item = (comps.get("product") or {}).get("item")
+    if not item:
+        raise EmptyCard("Metacritic card has no product item")
     critic = (comps.get("critic-score-summary") or {}).get("item") or {}
     user = (comps.get("user-score-summary") or {}).get("item") or {}
     video = item.get("video") or {}

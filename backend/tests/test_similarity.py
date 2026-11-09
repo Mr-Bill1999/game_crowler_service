@@ -71,3 +71,75 @@ def test_floor_leaves_out_games_that_do_not_play_alike():
     strict = [x["other_id"] for x in neighbours(items, min_gameplay=0.5)[1]["similar"]]
     assert len(strict) < len(loose) and strict[0] == 2  # the one that plays alike stays
     assert all(x["reasons"]["gameplay"] >= 0.5 for x in neighbours(items, min_gameplay=0.5)[1]["similar"])
+
+
+# ---------- block computation = the full-matrix original ----------
+
+def reference_neighbours(items, k=8, min_gameplay=-1.0):
+    """The full N x N version this module used until November 2026, kept as the reference for the block one."""
+    from app.pipeline.similarity import WEIGHTS, centred, norm_series, reasons
+
+    def zscore(m):
+        m = m.astype(np.float64)
+        np.fill_diagonal(m, np.nan)
+        mu, sd = np.nanmean(m, axis=1, keepdims=True), np.nanstd(m, axis=1, keepdims=True)
+        return np.nan_to_num((m - mu) / np.where(sd == 0, 1, sd), nan=0.0)
+
+    gameplay = centred(np.stack([i.gameplay for i in items]))
+    world = centred(np.stack([i.world for i in items]))
+    tags, vocab, tag_weight = tag_matrix([i.tags for i in items])
+    signals = {"gameplay": gameplay @ gameplay.T, "world": world @ world.T, "tags": tags @ tags.T}
+    z = {name: zscore(m) for name, m in signals.items()}
+    fusion = sum(w * z[name] for name, w in WEIGHTS.items())
+    np.fill_diagonal(fusion, -np.inf)
+    idf = dict(zip(vocab, tag_weight.tolist(), strict=True))
+    series = [norm_series(i.series) for i in items]
+    out = {}
+    for a in range(len(items)):
+        same, other = [], []
+        for b in np.argsort(-fusion[a]):
+            if b == a:
+                continue
+            if series[a] and series[b] == series[a]:
+                same.append(int(b))
+            elif signals["gameplay"][a, b] >= min_gameplay:
+                other.append(int(b))
+        out[items[a].game_id] = {
+            kind: [{"other_id": items[b].game_id, "score": round(float(fusion[a, b]), 4),
+                    "reasons": {**reasons(items[a], items[b], {s: float(z[s][a, b]) for s in WEIGHTS}, idf),
+                                "gameplay": round(float(signals["gameplay"][a, b]), 3)}}
+                   for b in lst[:k]]
+            for kind, lst in (("similar", other), ("series", same))}
+    return out
+
+
+def clustered(n: int, dim: int = 32, seed: int = 3) -> list[Item]:
+    rng = np.random.default_rng(seed)
+    centres = rng.standard_normal((6, dim)).astype(np.float32)
+    tags = [f"mechanics:{i}" for i in range(20)] + [f"tone:{i}" for i in range(10)]
+    return [Item(i, centres[i % 6] + 0.8 * rng.standard_normal(dim).astype(np.float32),
+                 centres[(i + 1) % 6] + rng.standard_normal(dim).astype(np.float32),
+                 list(rng.choice(tags, 5, replace=False)), f"Series {i % 9}" if i % 3 == 0 else None)
+            for i in range(n)]
+
+
+def test_block_version_gives_the_same_lists_as_the_full_matrix():
+    items = clustered(300)
+    for min_gameplay in (-1.0, 0.2):
+        want = reference_neighbours(items, min_gameplay=min_gameplay)
+        got = neighbours(items, min_gameplay=min_gameplay, block=64)  # several blocks, the last one short
+        assert got.keys() == want.keys()
+        for g in want:
+            for kind in ("similar", "series"):
+                w = [(x["other_id"], x["score"]) for x in want[g][kind]]
+                h = [(x["other_id"], x["score"]) for x in got[g][kind]]
+                assert sorted(s for _, s in w) == sorted(s for _, s in h), (g, kind)
+                assert {i for i, _ in w} == {i for i, _ in h} or len({s for _, s in w}) < len(w), (g, kind)
+                # reasons: the same tags; signals equal up to the last rounding step (float32 sums in blocks
+                # can land on the other side of a .xx5)
+                rw = {x["other_id"]: x["reasons"] for x in want[g][kind]}
+                for x in got[g][kind]:
+                    if x["other_id"] in rw:
+                        r = rw[x["other_id"]]
+                        assert x["reasons"]["tags"] == r["tags"] and x["reasons"]["gameplay"] == r["gameplay"]
+                        assert all(abs(x["reasons"]["signals"][s] - r["signals"][s]) <= 0.011 for s in r["signals"])

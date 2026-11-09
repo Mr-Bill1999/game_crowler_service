@@ -11,7 +11,7 @@ from google import genai
 from google.genai import errors, types
 
 from app.ai.base import LLMResult
-from app.core import faults, tape
+from app.core import faults, health, tape
 
 # USD per 1M tokens: standard input, standard output, batch input, batch output.
 # ai.google.dev/gemini-api/docs/pricing on 15.10.2026. Output includes thinking tokens.
@@ -122,7 +122,11 @@ class GeminiProvider:
         async with self._gate:
             return await key.client.aio.models.generate_content(model=model, contents=prompt, config=config)
 
-    async def generate_json(self, *, system: str, prompt: str | list[types.Part], schema: dict,
+    async def generate_json(self, **kw) -> LLMResult:
+        async with health.track("gemini"):
+            return await self._generate_json(**kw)
+
+    async def _generate_json(self, *, system: str, prompt: str | list[types.Part], schema: dict,
                             model: str | None = None, thinking_level: str | None = None,
                             max_output_tokens: int = 16384, media_resolution: str | None = None) -> LLMResult:
         """`prompt` is text, or parts mixing text and media (YouTube clips for deep analyze)."""
@@ -186,6 +190,10 @@ class GeminiProvider:
         )
 
     async def embed(self, texts: list[str], *, model: str, dim: int) -> list[list[float]]:
+        async with health.track("embeddings"):
+            return await self._embed(texts, model=model, dim=dim)
+
+    async def _embed(self, texts: list[str], *, model: str, dim: int) -> list[list[float]]:
         """One vector per text. Each text is its own Content: gemini-embedding-2 merges a plain list of strings into
         a single vector. Per-minute 429s are waited out; a daily one (retry in hours) is raised to the caller."""
         contents = [types.Content(parts=[types.Part(text=t)]) for t in texts]

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type PipelineEvent, type Presence } from "../api";
+import { api, type Health, type HealthSource, type HealthState, type PipelineEvent, type Presence } from "../api";
 
 const MAX_EVENTS = 3000;
 
@@ -13,8 +13,10 @@ const NODES = [
   { id: "user", label: "Отзывы игроков", prefixes: ["fetch.user"] },
   { id: "store", label: "Сохранение", prefixes: ["card."] },
   { id: "tier", label: "Уровни", prefixes: ["tier."] },
-  { id: "ai", label: "AI-анализ", prefixes: ["ai."] },
+  { id: "ai", label: "AI-анализ", prefixes: ["ai.", "facets."] },
+  { id: "profile", label: "Профили: Steam и критики", prefixes: ["profile."] },
   { id: "deep", label: "Deep analyze", prefixes: ["deep."] },
+  { id: "health", label: "Здоровье источников", prefixes: ["health."] },
 ];
 
 const nodeOf = (stage: string) => NODES.find((n) => n.prefixes.some((p) => stage.startsWith(p)))?.id ?? "run";
@@ -123,6 +125,81 @@ function Visitors({ data }: { data?: Presence }) {
   );
 }
 
+const STATE_LABEL: Record<HealthState, string> = {
+  ok: "работает", degraded: "с перебоями", stale: "нет новых данных", quota: "квота на сегодня",
+  down: "не работает", unknown: "нет данных",
+};
+const KIND_LABEL: Record<string, string> = {
+  redirect: "переадресация", not_json: "ответ не JSON", http_4xx: "ошибка 4xx", http_429: "лимит 429",
+  http_5xx: "ошибка 5xx", network: "сеть", parse: "форма ответа", quota: "квота", paused: "пауза", other: "ошибка",
+};
+
+function ago(iso?: string | null): string {
+  if (!iso) return "—";
+  const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (m < 1) return "только что";
+  if (m < 60) return `${m} мин назад`;
+  const h = Math.round(m / 60);
+  return h < 48 ? `${h} ч назад` : `${Math.round(h / 24)} дн назад`;
+}
+
+/** One tile per source: state, why, when it last worked, and 24 hours of calls (successes over failures). */
+function HealthTile({ s }: { s: HealthSource }) {
+  const peak = Math.max(1, ...s.hours.map((h) => h.ok + h.fail));
+  const bad = s.state !== "ok" && s.state !== "unknown";
+  return (
+    <article className={`htile is-${s.state}`}>
+      <header>
+        <span className="hdot" aria-hidden="true" />
+        <b>{s.label}</b>
+        <span className="hstate">{STATE_LABEL[s.state]}</span>
+      </header>
+      <p className="hreason">{s.reason}</p>
+      {s.hours.length > 0 && (
+        <div className="hbars" role="img"
+             aria-label={`за 24 часа: ${s.hours.reduce((a, h) => a + h.ok, 0)} успешных, ${s.hours.reduce((a, h) => a + h.fail, 0)} с ошибкой`}>
+          {s.hours.map((h, i) => (
+            <span key={i} title={`${24 - i} ч назад: ${h.ok} успешных, ${h.fail} с ошибкой`}>
+              <i className="ok" style={{ height: `${(h.ok / peak) * 100}%` }} />
+              <i className="fail" style={{ height: `${(h.fail / peak) * 100}%` }} />
+            </span>
+          ))}
+        </div>
+      )}
+      <dl className="hmeta">
+        {s.hours.length > 0 && <div><dt>успех</dt><dd>{ago(s.last_ok)}</dd></div>}
+        {s.canary && <div><dt>контроль</dt><dd title={s.canary.detail}>{s.canary.ok ? "✓" : "✕"} {ago(s.canary.at)}</dd></div>}
+        {s.since && bad && <div><dt>с</dt><dd>{new Date(s.since).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</dd></div>}
+      </dl>
+      {bad && s.last_error?.err_text && (
+        <p className="herror" title={s.last_error.err_text}>
+          {KIND_LABEL[s.last_error.err_kind ?? ""] ?? "ошибка"} · {s.last_error.err_text}
+        </p>
+      )}
+    </article>
+  );
+}
+
+function HealthBlock({ data, error }: { data?: Health; error: boolean }) {
+  const problems = data?.sources.filter((s) => s.state !== "ok" && s.state !== "unknown") ?? [];
+  return (
+    <section className="health" aria-label="Здоровье источников">
+      <div className="health-head">
+        <h2>Здоровье источников</h2>
+        <span className={`hsum is-${data?.status ?? "unknown"}`}>
+          {error ? "нет связи с API" : !data ? "загрузка…" : problems.length
+            ? `проблем: ${problems.length} — ${problems.map((p) => p.label).join(", ")}`
+            : "всё работает"}
+        </span>
+        <span className="muted">{data?.checked_at ? `проверено ${ago(data.checked_at)} · каждый час в :45` : ""}</span>
+      </div>
+      <div className="health-grid">
+        {data?.sources.map((s) => <HealthTile key={s.id} s={s} />)}
+      </div>
+    </section>
+  );
+}
+
 export function DevPanel() {
   const { events, live } = useEventStream();
   const [now, setNow] = useState(Date.now());
@@ -139,6 +216,7 @@ export function DevPanel() {
   const stats = useQuery({ queryKey: ["stats"], queryFn: api.stats, refetchInterval: 5000 });
   const runs = useQuery({ queryKey: ["runs"], queryFn: api.runs, refetchInterval: 5000 });
   const visitors = useQuery({ queryKey: ["presence"], queryFn: api.presence, refetchInterval: 10_000 });
+  const health = useQuery({ queryKey: ["health"], queryFn: api.health, refetchInterval: 60_000 });
   const start = useMutation({
     mutationFn: api.startRun,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["runs"] }),
@@ -194,6 +272,8 @@ export function DevPanel() {
       {(notQueued || (start.data && !start.data.queued)) && <p className="muted">Такой запуск уже в очереди или идёт.</p>}
       {asking && <RunDialog kind={asking} onClose={() => setAsking(null)}
                             onStarted={(queued) => { setAsking(null); setNotQueued(!queued); qc.invalidateQueries({ queryKey: ["runs"] }); }} />}
+
+      <HealthBlock data={health.data} error={health.isError} />
 
       <Visitors data={visitors.data} />
 
