@@ -1,5 +1,10 @@
 /* Light identity: warm paper, deep ink, a sage accent, hairlines; Metacritic score bands in muted tones. */
 :root {
+  /* One content width for the bar, the inner pages and the entrance, centred with a gutter. It used to be
+     max-width 1436 plus a gutter that grew with the screen, which squeezed the content to 856 px at 1920 and to
+     216 px (a phone column) at 2560. */
+  --content:1340px;
+  --gutter:48px;
   --paper:#ece7df;
   --surface:#e5e0d7;
   --surface-raised:#e8e3db;
@@ -54,7 +59,7 @@ img { max-width:100%; }
 .eyebrow { display:flex; align-items:center; gap:9px; font-size:11px; line-height:1.6; color:var(--muted); }
 
 .shell { min-height:100svh; }
-.topbar { position:sticky; top:0; z-index:20; display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:24px; padding:26px max(48px,calc((100vw - 1340px)/2)); background:color-mix(in srgb,var(--paper) 88%,transparent); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border-bottom:1px solid transparent; font-size:12px; }
+.topbar { position:sticky; top:0; z-index:20; display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:24px; padding:26px max(var(--gutter),calc((100% - var(--content))/2)); background:color-mix(in srgb,var(--paper) 88%,transparent); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); border-bottom:1px solid transparent; font-size:12px; }
 .brand { justify-self:start; color:var(--ink); text-decoration:none; font:500 22px/1 var(--f-display); letter-spacing:-.045em; white-space:nowrap; }
 .brand-mark { display:block; width:auto; height:30px; flex:none; }
 .topbar nav { display:flex; gap:30px; }
@@ -66,7 +71,7 @@ img { max-width:100%; }
 .topbar-side { justify-self:end; }
 .topbar .icon { width:14px; height:14px; }
 .topbar-side .side-short { display:none; }
-.page { display:grid; gap:28px; max-width:1436px; margin:0 auto; padding:36px max(48px,calc((100vw - 1340px)/2)) 80px; }
+.page { display:grid; gap:28px; width:100%; max-width:calc(var(--content) + 2 * var(--gutter)); margin:0 auto; padding:36px var(--gutter) 80px; }
 .page-head { display:flex; gap:15px; align-items:baseline; flex-wrap:wrap; }
 
 /* Entrance: the light identity — warm paper, deep ink, a sage accent, one matte object,
@@ -75,7 +80,7 @@ img { max-width:100%; }
 .welcome-shell>main { display:flex; flex:1; min-width:0; }
 .entry { --e-paper:var(--paper); --e-raised:var(--surface); --e-ink:var(--ink); --e-sage:var(--accent); --e-muted:var(--muted); --e-hair:var(--line); --e-display:var(--f-display);
   flex:1; min-width:0; min-height:100svh; display:grid; grid-template-columns:minmax(300px,1.2fr) minmax(0,1.4fr) minmax(200px,230px); grid-template-rows:auto 1fr auto auto; column-gap:40px;
-  padding:0 max(48px,calc((100vw - 1340px)/2)); background:radial-gradient(ellipse 60% 55% at 50% 52%,#f5f2ec 0%,var(--e-paper) 70%); color:var(--e-ink); font-size:12px; line-height:1.5; color-scheme:light; }
+  padding:0 max(var(--gutter),calc((100% - var(--content))/2)); background:radial-gradient(ellipse 60% 55% at 50% 52%,#f5f2ec 0%,var(--e-paper) 70%); color:var(--e-ink); font-size:12px; line-height:1.5; color-scheme:light; }
 .entry { position:relative; isolation:isolate; overflow-x:clip; }
 .entry a { color:inherit; text-decoration:none; }
 .entry small { display:block; color:var(--e-muted); font-size:10px; letter-spacing:.01em; }
@@ -562,7 +567,10 @@ select { min-height:42px; max-width:100%; padding:8px 12px; border:1px solid var
 .line .slug { overflow:hidden; text-overflow:ellipsis; }
 .line.slow .detail { color:var(--mixed); }
 
-@media (min-width:1700px) {
+/* Wide monitors (2560 and up): a wider column, so the catalogue gains columns instead of margins. */
+@media (min-width:2200px) {
+  :root { --content:1640px; --gutter:64px; }
+  .grid { grid-template-columns:repeat(5,minmax(0,1fr)); }
 }
 @media (max-width:1179px) {
   .grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
