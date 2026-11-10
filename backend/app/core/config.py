@@ -64,6 +64,8 @@ class Settings(BaseSettings):
     embed_batch: int = 44  # texts per request: 22 games x 2 facets; free tier allows 100 texts a minute
     embed_daily_texts: int = 900  # free tier: 1000 texts a day per model, every text in a batch counts
     similar_min_gameplay: float = 0.2  # below it a game is not offered as similar; see app/pipeline/similarity.py
+    similar_snapshot_days: int = 7  # centre and tag weights are renewed this often, or after this much growth:
+    similar_snapshot_growth: float = 0.10  # between renewals new games cost one pass over the catalogue, not N²
     facets_per_run: int = 150  # light essences per job: ~13 min at llm_rpm, the rest waits for the next hour
 
     # Deep analyze runs on the same free key: a shared daily pool, and the service's own analyses come first.

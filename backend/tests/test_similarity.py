@@ -106,7 +106,7 @@ def reference_neighbours(items, k=8, min_gameplay=-1.0):
                 other.append(int(b))
         out[items[a].game_id] = {
             kind: [{"other_id": items[b].game_id, "score": round(float(fusion[a, b]), 4),
-                    "reasons": {**reasons(items[a], items[b], {s: float(z[s][a, b]) for s in WEIGHTS}, idf),
+                    "reasons": {**reasons(items[a].tags, items[b].tags, {s: float(z[s][a, b]) for s in WEIGHTS}, idf),
                                 "gameplay": round(float(signals["gameplay"][a, b]), 3)}}
                    for b in lst[:k]]
             for kind, lst in (("similar", other), ("series", same))}
@@ -133,7 +133,8 @@ def test_block_version_gives_the_same_lists_as_the_full_matrix():
             for kind in ("similar", "series"):
                 w = [(x["other_id"], x["score"]) for x in want[g][kind]]
                 h = [(x["other_id"], x["score"]) for x in got[g][kind]]
-                assert sorted(s for _, s in w) == sorted(s for _, s in h), (g, kind)
+                # scores agree to the last rounding step: mean and spread now come from running sums
+                assert np.allclose(sorted(s for _, s in w), sorted(s for _, s in h), atol=1.5e-4), (g, kind)
                 assert {i for i, _ in w} == {i for i, _ in h} or len({s for _, s in w}) < len(w), (g, kind)
                 # reasons: the same tags; signals equal up to the last rounding step (float32 sums in blocks
                 # can land on the other side of a .xx5)
@@ -143,3 +144,61 @@ def test_block_version_gives_the_same_lists_as_the_full_matrix():
                         r = rw[x["other_id"]]
                         assert x["reasons"]["tags"] == r["tags"] and x["reasons"]["gameplay"] == r["gameplay"]
                         assert all(abs(x["reasons"]["signals"][s] - r["signals"][s]) <= 0.011 for s in r["signals"])
+
+
+# ---------- incremental: the same lists as a full pass with the same snapshot ----------
+
+def test_incremental_gives_the_lists_of_a_full_pass_with_the_same_snapshot():
+    from dataclasses import replace
+
+    from app.pipeline.similarity import build, lists, snapshot, update
+
+    pool = clustered(520, seed=5)
+    live = {i.game_id: i for i in pool[:300]}
+    snap = snapshot(list(live.values()), 0.0)
+    st = build(sorted(live.values(), key=lambda i: i.game_id), [None] * len(live), snap, block=64)
+    rng = np.random.default_rng(7)
+    later = iter(pool[300:])
+    for step in range(8):
+        gone = {int(g) for g in rng.choice(sorted(live), 6, replace=False)}
+        new = [next(later) for _ in range(25)]
+        # a game whose essence changed comes back with other tags and a series: removed and added again
+        moved = sorted(gone)[:2]
+        new += [replace(live[g], tags=live[g].tags[:2] + [f"setting:new{step}"], series="Series 1") for g in moved]
+        for g in gone:
+            live.pop(g)
+        live.update({i.game_id: i for i in new})
+        update(st, gone, new, [None] * len(new))
+        want = lists(build(sorted(live.values(), key=lambda i: i.game_id), [None] * len(live), snap))
+        assert lists(st) == want, step
+
+
+def test_lists_stay_exact_when_buffers_run_dry():
+    from app.pipeline.similarity import build, lists, snapshot, update
+
+    items = clustered(200, seed=11)
+    snap = snapshot(items, -1.0)
+    st = build(items, [None] * len(items), snap)
+    live = {i.game_id: i for i in items}
+    for row in (0, 1):  # a game's whole buffer leaves: its row must fall back to a full pass and stay exact
+        gone = {int(g) for g in st.bid[row] if g >= 0}
+        for g in gone:
+            live.pop(g)
+        recomputed = update(st, gone, [], [])
+        assert recomputed > 0
+        assert lists(st) == lists(build(sorted(live.values(), key=lambda i: i.game_id), [None] * len(live), snap))
+
+
+def test_snapshot_is_renewed_weekly_after_growth_or_on_a_new_floor():
+    from datetime import UTC, datetime, timedelta
+
+    from app.pipeline.similarity import State, due_snapshot, snapshot
+
+    t = datetime(2026, 11, 1, tzinfo=UTC)
+    st = State(snapshot(clustered(100), 0.2, t))
+    assert due_snapshot(None, 100, 0, 0.2, t, 0.1, 7)
+    assert not due_snapshot(st, 109, 5, 0.2, t + timedelta(days=6), 0.1, 7)
+    assert due_snapshot(st, 110, 5, 0.2, t, 0.1, 7)  # +10 %
+    assert due_snapshot(st, 100, 5, 0.2, t + timedelta(days=7), 0.1, 7)
+    assert due_snapshot(st, 100, 5, 0.3, t, 0.1, 7)  # the floor changed
+    assert due_snapshot(st, 100, 26, 0.2, t, 0.1, 7)  # a quarter of the catalogue changed: a full pass is cheaper

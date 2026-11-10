@@ -158,8 +158,8 @@ class GameFacets(Base):
 
 
 class SimilarGame(Base):
-    """Precomputed neighbours, rebuilt for the whole catalogue at once: centring, tag weights and per-query
-    z-scores all depend on every game, so one new game can reorder others' lists."""
+    """Precomputed neighbours. Kept up to date row by row against a weekly snapshot of the catalogue's centre and
+    tag weights (app/pipeline/similarity.py); only lists that changed are rewritten."""
 
     __tablename__ = "similar_games"
 

@@ -37,7 +37,7 @@ from app.pipeline.healthcheck import evaluate, run_canaries
 from app.pipeline.ingest import Deps, IngestResult, ingest_game
 from app.pipeline.quarantine import card_failed, cards_ok
 from app.pipeline.quota import FREE_STATUSES, quota_day
-from app.pipeline.similarity import rebuild
+from app.pipeline.similarity import refresh
 from app.pipeline.top import record_top
 from app.profile.pipeline import admit, pace_limit, plan_batch, readable, token_cap, tokens_today
 from app.profile.pipeline import enrich_game as enrich_one
@@ -335,7 +335,8 @@ async def update_facets(ctx: dict) -> dict:
         stats["finished"] = await refinish_all(session)
         empty = await session.scalar(select(SimilarGame.game_id).limit(1)) is None
         if embed["embedded"] or stats["finished"] or empty:
-            stats["similar"] = await rebuild(session, s.similar_min_gameplay)
+            stats["similar"] = await refresh(session, ctx, clock.now(), s.similar_min_gameplay,
+                                             s.similar_snapshot_growth, s.similar_snapshot_days)
             await d.bus.emit("facets.similar", **stats["similar"])
     await d.bus.emit("facets.done", essences=essence["ok"], embedded=embed["embedded"], waiting=embed["waiting"])
     return stats
