@@ -4,7 +4,7 @@ import time
 from dataclasses import dataclass
 from datetime import timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -12,7 +12,7 @@ from app.ai.selection import SUBSTANTIVE_WORDS
 from app.core import clock
 from app.core.config import Settings
 from app.events.bus import EventBus
-from app.models import Game, GamePlatform, RawResponse, Review
+from app.models import Analysis, Game, GamePlatform, GameProfile, RawResponse, Review
 from app.pipeline.tiers import TierInput, compute_tier, is_spike, needs_analysis
 from app.scraper.metacritic import Metacritic
 from app.scraper.normalize import GameCard, ReviewData, parse_composer, parse_review
@@ -74,6 +74,17 @@ async def text_counts(session: AsyncSession, game_id: int) -> tuple[int, int]:
     return critic or 0, user or 0
 
 
+async def covered_by_kind(session: AsyncSession, game_id: int) -> dict[str, int]:
+    """Texts the latest critic and player summaries cover."""
+    rows = (await session.execute(select(Analysis.kind, Analysis.texts_seen).where(
+        Analysis.game_id == game_id, Analysis.kind.in_(("critic", "user")))
+        .order_by(Analysis.created_at.desc(), Analysis.id.desc()))).all()
+    out: dict[str, int] = {}
+    for kind, n in rows:
+        out.setdefault(kind, n)
+    return out
+
+
 async def _insert_reviews(session: AsyncSession, game_id: int, rows: list[ReviewData]) -> int:
     unique = {r.id: r for r in rows}
     values = [{**r.__dict__, "game_id": game_id} for r in unique.values()]
@@ -104,6 +115,14 @@ async def _sync_reviews(d: Deps, session: AsyncSession, card: GameCard, full: bo
             raw = await d.mc.reviews(kind, card.slug, p.slug, known)
             new += await _insert_reviews(session, card.id, [parse_review(r, kind) for r in raw])
     return new
+
+
+async def wake_profile(session: AsyncSession, game_id: int, now, within: timedelta) -> None:
+    """A saturated profile waits weeks for its next pass: a review spike brings it forward to now. A pass due within
+    `within` anyway is left as it is, so spikes add no extra passes to games already on a short cycle."""
+    await session.execute(update(GameProfile).where(GameProfile.game_id == game_id,
+                                                    GameProfile.next_enrich_at > now + within)
+                          .values(next_enrich_at=now))
 
 
 async def ingest_game(d: Deps, slug: str, source: str | None = None, force_full: bool = False) -> IngestResult:
@@ -141,6 +160,7 @@ async def ingest_game(d: Deps, slug: str, source: str | None = None, force_full:
             game.last_growth_at = now
         if not is_new and is_spike(game.snapshot_count, total, s):
             game.hot_until = now + timedelta(hours=s.spike_hot_hours)
+            await wake_profile(session, card.id, now, timedelta(hours=s.enrich_hot_hours))
             await d.bus.emit("tier.spike", slug=slug, before=game.snapshot_count, now=total)
         if is_new or game.snapshot_at is None or now - game.snapshot_at >= timedelta(hours=24):
             game.snapshot_count, game.snapshot_at = total, now
@@ -154,9 +174,11 @@ async def ingest_game(d: Deps, slug: str, source: str | None = None, force_full:
             game.archived_at = now
 
         critic_texts, user_texts = await text_counts(session, card.id)
+        covered = (await covered_by_kind(session, card.id)
+                   if (game.analyzed_review_count or 0) >= s.analysis_saturated_texts else None)
         analyze = needs_analysis(critic_texts=critic_texts, user_texts=user_texts,
                                  analyzed_texts=game.analyzed_review_count, analyzed_at=game.analyzed_at,
-                                 now=now, s=s)
+                                 now=now, s=s, covered=covered)
         await session.commit()
 
     await d.bus.emit("card.done", slug=slug, ms=round((time.perf_counter() - t0) * 1000), new=is_new,

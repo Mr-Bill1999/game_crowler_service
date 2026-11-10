@@ -88,3 +88,37 @@ async def test_title_typos_and_talk_of_the_sample_get_one_retry_then_are_repaire
     run = await lc.analyze_kind(p, g, "user", [user(i, 60, T0) for i in range(6)], None, "m", None)
     assert len(run.calls) == 2 and "Название игры пиши точно" in p.prompts[1][1] and "выборку" in p.prompts[1][1]
     assert run.data["summary"] == "Игроки хвалят Game Sequel." and "_checks" not in run.data
+
+
+def kind_run(kind: str, texts: int, data: bool = True, error: str | None = None) -> lc.KindRun:
+    return lc.KindRun(kind, "error" if error else ("update" if data else "skip"), data={"summary": RU} if data else None,
+                      texts_seen=texts, error=error)
+
+
+def test_a_failed_part_does_not_make_the_next_hour_redo_the_parts_that_succeeded():
+    """Nov 2026: one game's player summary ran 7 times in a day because another part kept failing."""
+    prev = {"critic": Analysis(kind="critic", texts_seen=40), "user": Analysis(kind="user", texts_seen=500)}
+    runs = [kind_run("critic", 45, data=False, error="503"), kind_run("user", 620)]
+    assert lc.checked(runs, essence_failed=False)  # the player summary was written: today's check is done
+    assert lc.covered_texts(runs, prev) == 40 + 620  # the critic texts stay unread, so they count as new tomorrow
+    assert lc.checked([kind_run("critic", 45), kind_run("user", 620)], essence_failed=True)
+    assert not lc.checked([kind_run("critic", 45, data=False, error="503"),
+                           kind_run("user", 620, data=False, error="503")], essence_failed=False)  # retry next hour
+    assert lc.checked([kind_run("critic", 45, data=False), kind_run("user", 620, data=False)], essence_failed=False)
+    assert lc.covered_texts([kind_run("critic", 3, data=False, error="x")], {}) == 0
+
+
+def test_an_essence_older_than_a_summary_is_built_again():
+    a = lambda kind, h: Analysis(kind=kind, created_at=T0 + timedelta(hours=h))
+    assert lc.essence_stale({"user": a("user", 1)})  # never built
+    assert not lc.essence_stale({})
+    assert not lc.essence_stale({"user": a("user", 1), "essence": a("essence", 1)})  # written together
+    assert lc.essence_stale({"critic": a("critic", 1), "user": a("user", 5), "essence": a("essence", 1)})
+
+
+def test_a_saturated_kind_sits_out_the_run_the_other_kind_started():
+    prev = Analysis(kind="user", texts_seen=300)
+    assert lc.held("user", [user(i, 60, T0) for i in range(449)], prev, 300, 0.5)
+    assert not lc.held("user", [user(i, 60, T0) for i in range(450)], prev, 300, 0.5)
+    assert not lc.held("user", [user(i, 60, T0) for i in range(10)], Analysis(kind="user", texts_seen=299), 300, 0.5)
+    assert not lc.held("critic", [], None, 300, 0.5)

@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     reanalyze_ratio: float = 0.20  # re-analyse after +20% new text reviews...
     reanalyze_min_new: int = 25  # ...or +25, whichever comes first...
     reanalyze_floor: int = 3  # ...but never for fewer than 3; and at most once per calendar day (UTC)
+    analysis_saturated_texts: int = 300  # summaries that already cover this many texts are saturated: a new batch
+    analysis_saturated_ratio: float = 0.5  # barely moves them, so they wait until the texts grow by half
     llm_provider: str = "none"  # none | gemini
     llm_model: str = "gemini-3.5-flash-lite"  # picked by the blind model comparison, docs/model-comparison.html
     llm_thinking_level: str | None = "minimal"
@@ -87,6 +89,8 @@ class Settings(BaseSettings):
     profile_enabled: bool = True
     profile_min_fullness: int = 60  # below it the card shows fullness and what is missing, not a profile
     profile_rebuild_growth: float = 0.2  # rebuild the profile when evidence grew this much since the last one
+    profile_saturated_fullness: int = 80  # a built profile this full is saturated: its sources are collected again
+    profile_saturated_days: int = 30  # only this often, or at once when its reviews spike
     profile_per_run: int = 40  # new and due games per run, at most; the rest wait for the next hour
     profile_new_days: int = 3  # discovered within this window: "new", always enriched (the discovery window)
     profile_backlog_share: float = 0.25  # of the earlier catalogue per quota day: four days to cover it all
@@ -105,6 +109,8 @@ class Settings(BaseSettings):
     enrich_hot_hours: int = 24  # how often a game's sources are collected again, by its tier
     enrich_warm_hours: int = 72
     enrich_cool_hours: int = 168
+    enrich_dormant_hours: int = 336  # no reviews anywhere and nothing to read: of 87 unrated games that reached 5+ Steam
+    # reviews, all had them on the first pass, none on a weekly one (Nov 2026); they archive after 30 days anyway
 
     # Test stand: replayable external calls and a frozen clock (see stand/README.md)
     tape_mode: str = "live"  # live | record | replay | auto (replay what is recorded, record the rest)

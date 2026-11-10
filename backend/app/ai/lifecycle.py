@@ -47,6 +47,34 @@ class KindRun:
         return sum(c.cost_usd for c in self.calls)
 
 
+def covered_texts(runs: list[KindRun], prev: dict[str, Analysis]) -> int:
+    """Text reviews the summaries now cover. A kind that failed keeps what its last summary covered, so its new
+    reviews still count as unread and bring it back on the next day's check."""
+    return sum(r.texts_seen if not r.error else (prev[r.kind].texts_seen if r.kind in prev else 0) for r in runs)
+
+
+def checked(runs: list[KindRun], essence_failed: bool) -> bool:
+    """Whether this run counts as the day's check. It does when anything was written: a failed part must not make
+    the next hourly run redo the parts that succeeded (Nov 2026: one game's player summary ran 7 times in a day
+    while another part kept failing). A run where everything failed is retried next hour."""
+    return any(r.data for r in runs) or not (any(r.error for r in runs) or essence_failed)
+
+
+def essence_stale(prev: dict[str, Analysis]) -> bool:
+    """The essence is older than a summary it should reflect: its last build failed, so build it again."""
+    if "essence" not in prev:
+        return any(k in prev for k in ("critic", "user"))
+    newest = max((prev[k].created_at for k in ("critic", "user") if k in prev and prev[k].created_at), default=None)
+    return newest is not None and prev["essence"].created_at is not None and prev["essence"].created_at < newest
+
+
+def held(kind: str, reviews: list[Review], prev: Analysis | None, saturated_texts: int, ratio: float) -> bool:
+    """A saturated summary of this kind sits this run out: the other kind brought the game here."""
+    if prev is None or (prev.texts_seen or 0) < saturated_texts:
+        return False
+    return len(texts_of(kind, reviews)) - prev.texts_seen < ratio * prev.texts_seen
+
+
 def texts_of(kind: str, reviews: list[Review]) -> list[Review]:
     if kind == "critic":
         return [r for r in reviews if r.quote]

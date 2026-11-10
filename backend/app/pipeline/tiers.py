@@ -49,15 +49,32 @@ def is_spike(snapshot_count: int, total_now: int, s: Settings) -> bool:
     return new >= s.spike_min_new and new >= s.spike_ratio * max(snapshot_count, 1)
 
 
+def saturated_kind_due(texts: int, covered: int, s: Settings) -> bool:
+    """A summary that already covers this many texts barely moves with a new batch: it waits until they grow by half
+    (Nov 2026: a remake with ~400 new player reviews a day re-read 300 of them daily, 125k tokens a run)."""
+    return texts - covered >= s.analysis_saturated_ratio * covered
+
+
 def needs_analysis(*, critic_texts: int, user_texts: int, analyzed_texts: int,
-                   analyzed_at: datetime | None, now: datetime, s: Settings) -> bool:
+                   analyzed_at: datetime | None, now: datetime, s: Settings,
+                   covered: dict[str, int] | None = None) -> bool:
     """Counts text reviews only (critics + player reviews long enough to be read), never bare ratings:
-    the model only sees texts, so ratings alone must not trigger a run. At most once per calendar day."""
+    the model only sees texts, so ratings alone must not trigger a run. At most once per calendar day.
+    `covered` (texts each kind's summary covers) lets a saturated kind wait on its own, so a pile of player reviews
+    never holds back the critics' summary, or the other way round."""
     if critic_texts < s.analysis_min_critic and user_texts < s.analysis_min_user:
         return False
     if analyzed_at is None:
         return True
     if analyzed_at.date() >= now.date():
         return False
-    new = critic_texts + user_texts - analyzed_texts
+    texts, cov = {"critic": critic_texts, "user": user_texts}, covered or {}
+    full = {k for k in texts if cov.get(k, 0) >= s.analysis_saturated_texts}
+    if any(saturated_kind_due(texts[k], cov[k], s) for k in full):
+        return True
+    if full:
+        new = sum(texts[k] - cov.get(k, 0) for k in texts if k not in full)
+        analyzed_texts = sum(cov.get(k, 0) for k in texts if k not in full)
+    else:
+        new = critic_texts + user_texts - analyzed_texts
     return new >= s.reanalyze_floor and (new >= s.reanalyze_min_new or new >= s.reanalyze_ratio * max(analyzed_texts, 1))

@@ -16,7 +16,16 @@ from sqlalchemy import select, update
 from app.ai.analyze import essence, load_reviews
 from app.ai.deep import absolute_facts, run_deep, search_queries
 from app.ai.gemini import GeminiProvider
-from app.ai.lifecycle import analyze_kind, latest_analyses, metacritic_user_summary
+from app.ai.lifecycle import (
+    KindRun,
+    analyze_kind,
+    checked,
+    covered_texts,
+    essence_stale,
+    held,
+    latest_analyses,
+    metacritic_user_summary,
+)
 from app.core import clock, health
 from app.core.config import get_settings
 from app.core.db import SessionLocal, init_db
@@ -30,8 +39,8 @@ from app.pipeline.quarantine import card_failed, cards_ok
 from app.pipeline.quota import FREE_STATUSES, quota_day
 from app.pipeline.similarity import rebuild
 from app.pipeline.top import record_top
+from app.profile.pipeline import admit, pace_limit, plan_batch, readable, token_cap, tokens_today
 from app.profile.pipeline import enrich_game as enrich_one
-from app.profile.pipeline import pace_limit, plan_batch, token_cap, tokens_today
 from app.scraper.client import MCClient
 from app.scraper.metacritic import Metacritic
 from app.sources.critics import Critics
@@ -39,6 +48,7 @@ from app.sources.steam import Steam
 from app.sources.youtube import YouTube, YouTubeError, pick_clips, pick_video
 
 log = logging.getLogger(__name__)
+HELD_HEADROOM = 3  # candidates planned per place in a run: held games give their place to the next ones
 RUN_TIMEOUT = 55 * 60
 ctx_owner: ContextVar[str] = ContextVar("run_owner", default="worker")
 INGEST_CONCURRENCY = 4  # games in flight; HTTP pacing is the rate limiter's job
@@ -262,14 +272,17 @@ async def analyze_game(ctx: dict, game_id: int, run_id: str | None = None) -> No
     await d.bus.emit("ai.start", slug=game.slug, model=s.llm_model, critic=len(reviews["critic"]),
                      user=len(reviews["user"]))
 
-    runs = await asyncio.gather(*(
+    wait = {k for k in ("critic", "user")
+            if held(k, reviews[k], prev.get(k), s.analysis_saturated_texts, s.analysis_saturated_ratio)}
+    runs = [*await asyncio.gather(*(
         analyze_kind(provider, game, kind, reviews[kind], prev.get(kind), s.llm_model, s.llm_thinking_level,
                      user_mc if kind == "user" else None)
-        for kind in ("critic", "user")))
+        for kind in ("critic", "user") if kind not in wait)),
+        *(KindRun(k, "skip", texts_seen=prev[k].texts_seen) for k in sorted(wait))]
     by_kind = {r.kind: r for r in runs}
     changed = any(r.data for r in runs)
     ess = None
-    if changed or ("essence" not in prev and any(k in prev for k in ("critic", "user"))):
+    if changed or essence_stale(prev):
         latest = {k: (by_kind[k].data or (prev[k].payload if k in prev else None)) for k in ("critic", "user")}
         ess = await essence(provider, game, latest["critic"], latest["user"], s.llm_model, s.llm_thinking_level)
 
@@ -289,8 +302,8 @@ async def analyze_game(ctx: dict, game_id: int, run_id: str | None = None) -> No
             session.add(Analysis(game_id=game_id, kind="essence", mode="first" if "essence" not in prev else "update",
                                  provider=provider.name, model=s.llm_model, payload=ess.data,
                                  tokens_in=ess.tokens_in, tokens_out=ess.tokens_out, cost_usd=ess.cost_usd))
-        if not any(r.error for r in runs) and not (ess and ess.error):  # a failed part retries on the next check
-            game.analyzed_review_count = sum(r.texts_seen for r in runs)
+        if checked(runs, bool(ess and ess.error)):  # a failed part waits for the next day's check
+            game.analyzed_review_count = covered_texts(runs, prev)
             game.analyzed_at = now
         await session.commit()
 
@@ -401,13 +414,13 @@ async def deep_analyze(ctx: dict, deep_id: int) -> None:
                  tokens_out=r.tokens_out + q_out, **video_fields)
 
 
-async def enrich_game(ctx: dict, game_id: int) -> dict:
+async def enrich_game(ctx: dict, game_id: int, read: bool = True) -> dict:
     """One game's profile pass: collect from every platform, extract evidence, fullness, profile when enough."""
     d: Deps = ctx["deps"]
-    res = await enrich_one(d.sessions, ctx.get("llm"), ctx["steam"], ctx["critics"], d.settings, game_id)
+    res = await enrich_one(d.sessions, ctx.get("llm"), ctx["steam"], ctx["critics"], d.settings, game_id, read)
     await d.bus.emit("profile.game", "error" if res.errors and not res.extracted and not res.collected else "ok",
                      slug=res.slug, collected=res.collected or None, evidence=res.extracted or None,
-                     waiting=res.waiting or None,
+                     waiting=res.waiting or None, unread=res.unread or None,
                      fullness=res.fullness, built=res.built or None, tokens_in=res.tokens_in or None,
                      tokens_out=res.tokens_out or None, errors=res.errors or None)
     return {"slug": res.slug, "fullness": res.fullness, "built": res.built}
@@ -415,16 +428,18 @@ async def enrich_game(ctx: dict, game_id: int) -> dict:
 
 async def enrich_due(ctx: dict, limit: int | None = None) -> dict:
     """Every new game, games due again and a quarter of the earlier catalogue a day, one game at a time (Steam's
-    pace is per worker), stopping when the profiles have spent their share of today's tokens."""
+    pace is per worker). Games the model would read keep to the token limit and the pace; games it would not read
+    are collected whatever the tokens. Held games give their place in the run to the next candidates."""
     d: Deps = ctx["deps"]
     s = d.settings
+    limit = limit or s.profile_per_run
     async with d.sessions() as session:
-        batch = await plan_batch(session, s, clock.now(), limit)
+        batch = await plan_batch(session, s, clock.now(), limit * HELD_HEADROOM)
     await d.bus.emit("profile.due", count=len(batch.ids), new=batch.new, refresh=batch.refresh,
                      backlog=batch.backlog, backlog_left_today=batch.backlog_left_today,
                      backlog_remaining=batch.backlog_remaining)
-    built = done = paced = 0
-    stopped = None
+    built = done = 0
+    holds = Counter()
     cap = token_cap(s)
     llm = ctx.get("llm")
     if llm is not None and getattr(llm, "refused", None):  # a key refused with 403 carries no share of the budget
@@ -433,27 +448,31 @@ async def enrich_due(ctx: dict, limit: int | None = None) -> dict:
     day_start, _ = quota_day(clock.now(), s.quota_tz)
     spent = pace = 0
     for game_id in batch.ids:
+        if done >= limit:
+            break
         async with d.sessions() as session:
             spent = await tokens_today(session, s, clock.now())
-        if spent >= cap:
-            stopped = f"profiles spent {spent} of {cap} tokens today"
-            break
+            game = await session.get(Game, game_id)
+            will_read = await readable(session, game, s)
         # new games and the top may use the whole day's budget; everything else keeps to an even pace and leaves a
         # reserve, so a backfill can no longer spend the day in an hour and leave new games waiting for tomorrow
         pace = pace_limit(cap, clock.now(), day_start, s.profile_pace_reserve)
-        if game_id not in batch.free and spent >= pace:
-            paced += 1
+        step = admit(will_read, game_id in batch.free, spent, cap, pace)
+        if step in ("cap", "pace"):
+            holds[step] += 1
             continue
         try:
-            built += (await enrich_game(ctx, game_id))["built"]
+            built += (await enrich_game(ctx, game_id, read=step == "read"))["built"]
             done += 1
         except Exception as e:  # one game failing must not stop the batch
             log.exception("enrich failed: %s", game_id)
             await d.bus.emit("profile.game", "error", game_id=game_id, error=_reason(e))
-    await d.bus.emit("profile.done", "skip" if stopped else "ok", games=done, built=built, planned=len(batch.ids),
-                     stopped=stopped, held_by_pace=paced or None, spent=spent, pace=pace or None, cap=cap)
+    await d.bus.emit("profile.done", "ok", games=done, built=built, planned=len(batch.ids),
+                     held_by_cap=holds["cap"] or None, held_by_pace=holds["pace"] or None, spent=spent,
+                     pace=pace or None, cap=cap)
     return {"games": done, "built": built, "planned": len(batch.ids), "new": batch.new, "refresh": batch.refresh,
-            "backlog": batch.backlog, "backlog_remaining": batch.backlog_remaining, "stopped": stopped}
+            "backlog": batch.backlog, "backlog_remaining": batch.backlog_remaining,
+            "held": dict(holds) or None}
 
 
 async def check_health(ctx: dict) -> dict:

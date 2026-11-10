@@ -70,6 +70,29 @@ def test_analysis_trigger_counts_texts_and_runs_once_a_day():
     assert not needs_analysis(critic_texts=4, user_texts=2, analyzed_texts=5, analyzed_at=yesterday, **kw)  # floor
 
 
+
+def test_saturated_summaries_wait_until_their_texts_grow_by_half():
+    """Nov 2026: a remake with 400 new player reviews a day re-read 300 of them every day, 125k tokens a run."""
+    kw = {"now": NOW, "s": S, "analyzed_at": NOW - timedelta(days=1)}
+    # not saturated: the usual +25
+    assert needs_analysis(critic_texts=50, user_texts=279, analyzed_texts=299, covered={"critic": 50, "user": 249}, **kw)
+    # the players' summary covers 300: +149 waits, +150 runs
+    assert not needs_analysis(critic_texts=40, user_texts=449, analyzed_texts=340, covered={"critic": 40, "user": 300},
+                              **kw)
+    assert needs_analysis(critic_texts=40, user_texts=450, analyzed_texts=340, covered={"critic": 40, "user": 300}, **kw)
+    # without per-kind counts nothing is saturated
+    assert needs_analysis(critic_texts=40, user_texts=449, analyzed_texts=340, **kw)
+
+
+def test_a_saturated_kind_never_holds_back_the_other():
+    """Phantom Blade Zero, Nov 2026: 103 critics and 202 players covered, 305 together. Counted together, 30 new
+    critic reviews would have waited for 153 more texts."""
+    kw = {"now": NOW, "s": S, "analyzed_at": NOW - timedelta(days=1)}
+    cov = {"critic": 103, "user": 1407}
+    assert needs_analysis(critic_texts=133, user_texts=1407, analyzed_texts=1510, covered=cov, **kw)  # +30 critics
+    assert not needs_analysis(critic_texts=105, user_texts=1700, analyzed_texts=1510, covered=cov, **kw)
+    assert not needs_analysis(critic_texts=103, user_texts=1407, analyzed_texts=1510, covered=cov, **kw)
+
 def item(i: int) -> FinderItem:
     return FinderItem(i, f"g{i}", f"Game {i}", date(2026, 10, 14), None, 0, [])
 

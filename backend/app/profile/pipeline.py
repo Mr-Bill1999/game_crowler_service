@@ -6,7 +6,7 @@ import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 
 from app.core import clock
 from app.core.config import Settings
@@ -28,6 +28,7 @@ class EnrichResult:
     slug: str
     collected: dict = field(default_factory=dict)
     waiting: bool = False  # nothing worth reading yet: documents collected, the model not called
+    unread: bool = False  # worth reading, but today's tokens are spent: collected only, read on the next pass
     extracted: int = 0
     tokens_in: int = 0
     tokens_out: int = 0
@@ -51,6 +52,18 @@ async def readable(session, game: Game, s: Settings) -> bool:
     return worth_reading(False, False, n, s.profile_min_steam_reviews)
 
 
+def admit(will_read: bool, free: bool, spent: int, cap: int, pace: int) -> str:
+    """What a run does with one game: "read" it, only "collect" (the model would not be called anyway, or the tokens
+    are spent but the pass costs none), or hold it for a later run ("cap", "pace") without using a place in the run.
+    The token limit never stops collection: on Nov 9-10, 2026 a spent limit stopped 12 runs whole, though most of
+    their games needed no tokens."""
+    if spent >= cap:
+        return "cap" if will_read else "collect"
+    if will_read and not free and spent >= pace:
+        return "pace"
+    return "read"
+
+
 def pace_limit(cap: int, now: datetime, day_start: datetime, reserve: float) -> int:
     """How much of today's profile budget the paced queue (refreshes, backfills, the old catalogue) may have spent by
     now: an even share per hour of the quota day, counted cumulatively so a quiet hour's share carries over, and
@@ -60,9 +73,23 @@ def pace_limit(cap: int, now: datetime, day_start: datetime, reserve: float) -> 
     return limit if hour >= 22 else min(limit, int(cap * (1 - reserve)))
 
 
-def next_pass(game: Game, now: datetime, s: Settings) -> datetime | None:
+def saturated(fullness: int, built: bool, s: Settings) -> bool:
+    """A built profile this full has what it needs: more of the same sources rarely changes it (the games at 80+ took
+    ~180k tokens a day in repeat passes, Nov 2026), so they are collected again only on a long control cycle."""
+    return built and fullness >= s.profile_saturated_fullness
+
+
+def next_pass(game: Game, now: datetime, s: Settings, full: bool = False, waiting: bool = False) -> datetime | None:
+    """A saturated profile waits for the control cycle, but never while the game is hot: its first two weeks (patches
+    and reception still move, and a profile built on day two would keep the launch picture for a month) or a review
+    spike."""
     if game.archived_at is not None:
         return None
+    hot = game.tier == "hot" or (game.hot_until is not None and game.hot_until > now)
+    if full and not hot:
+        return now + timedelta(days=s.profile_saturated_days)
+    if game.tier == "dormant" and waiting:  # no reviews anywhere and nothing to read: a fortnight, see config
+        return now + timedelta(hours=s.enrich_dormant_hours)
     hours = {"hot": s.enrich_hot_hours, "warm": s.enrich_warm_hours}.get(game.tier, s.enrich_cool_hours)
     return now + timedelta(hours=hours)
 
@@ -79,6 +106,10 @@ class Batch:
     backlog_left_today: int = 0
     backlog_remaining: int = 0
 
+
+# Games due again: the top, then by tier, then by how long they have waited. By due date alone, a pile of quiet games
+# due yesterday kept hot games waiting up to 45 h (Nov 2026).
+TIER_ORDER = case({"hot": 0, "warm": 1, "cool": 2}, value=Game.tier, else_=3)
 
 PRIORITY = (Game.top_rank.asc().nulls_last(), (Game.critic_count + Game.user_count).desc(),
             Game.release_date.desc().nulls_last())
@@ -98,7 +129,8 @@ async def plan_batch(session, s: Settings, now: datetime, limit: int | None = No
     new = list((await session.execute(base.where(live, never, Game.discovered_at >= new_cut)
                                       .order_by(*PRIORITY).limit(limit))).scalars())
     refresh = list((await session.execute(base.where(live, GameProfile.next_enrich_at <= now)
-                                          .order_by(Game.top_rank.asc().nulls_last(), GameProfile.next_enrich_at)
+                                          .order_by(Game.top_rank.asc().nulls_last(), TIER_ORDER,
+                                                    GameProfile.next_enrich_at)
                                           .limit(max(0, limit - len(new))))).scalars())
 
     old = Game.discovered_at < new_cut
@@ -214,7 +246,10 @@ async def score(session, game: Game, s: Settings) -> tuple[int, dict, dict, list
     return total, {str(f): x for f, x in factors.items()}, by_source, rows
 
 
-async def enrich_game(sessions, provider, steam: Steam, critics: Critics, s: Settings, game_id: int) -> EnrichResult:
+async def enrich_game(sessions, provider, steam: Steam, critics: Critics, s: Settings, game_id: int,
+                      read: bool = True) -> EnrichResult:
+    """One pass: collect, then, when `read` and the game has something to say, extract and build. With `read` off
+    (today's profile tokens are spent) the pass only collects, and a game worth reading comes due again at once."""
     async with sessions() as session:
         game = await session.get(Game, game_id)
     res = EnrichResult(slug=game.slug)
@@ -222,6 +257,9 @@ async def enrich_game(sessions, provider, steam: Steam, critics: Critics, s: Set
     async with sessions() as session:
         game = await session.get(Game, game_id)
         res.waiting = not await readable(session, game, s)
+    res.unread = not read and not res.waiting
+    if not read:
+        provider = None
     if provider is not None and not res.waiting:
         await extract_new(sessions, provider, s, game, res)
 
@@ -232,11 +270,13 @@ async def enrich_game(sessions, provider, steam: Steam, critics: Critics, s: Set
         prof = await session.get(GameProfile, game_id) or GameProfile(game_id=game_id, profile_evidence=0)
         session.add(prof)
         prof.fullness, prof.factors, prof.sources, prof.evidence_count = total, factors, by_source, len(evidence)
-        prof.enriched_at, prof.next_enrich_at = now, next_pass(game, now, s)
-        prof.first_enriched_at = prof.first_enriched_at or now
-        prof.error = "; ".join(f"{k}: {v}" for k, v in res.errors.items()) or None
         grown = len(evidence) >= max(1, prof.profile_evidence) * (1 + s.profile_rebuild_growth)
         want = provider is not None and total >= s.profile_min_fullness and (prof.payload is None or grown)
+        full = saturated(total, prof.payload is not None and not want, s)  # a pending build is not saturated yet
+        prof.enriched_at = now
+        prof.next_enrich_at = now if res.unread else next_pass(game, now, s, full, res.waiting)
+        prof.first_enriched_at = prof.first_enriched_at or now
+        prof.error = "; ".join(f"{k}: {v}" for k, v in res.errors.items()) or None
         await session.commit()
     res.fullness = total
     if not want:
@@ -252,6 +292,8 @@ async def enrich_game(sessions, provider, steam: Steam, critics: Critics, s: Set
     async with sessions() as session:
         prof = await session.get(GameProfile, game_id)
         prof.payload, prof.profile_evidence, prof.model, prof.profiled_at = payload, len(evidence), r.model, clock.now()
+        if saturated(total, True, s):  # built at last: from now on the long cycle (a failed build kept the usual one)
+            prof.next_enrich_at = next_pass(game, prof.profiled_at, s, True)
         session.add(ProfileCall(game_id=game_id, stage="profile", model=r.model, tokens_in=r.tokens_in,
                                 tokens_out=r.tokens_out))
         await session.commit()
